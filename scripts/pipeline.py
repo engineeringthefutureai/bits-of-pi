@@ -106,11 +106,22 @@ def bench(cfg, model_file, out_path, device):
     return rows
 
 
+def model_exps(cfg, model):
+    """Generation experiments for this model: all of GEN_EXPS minus the model's skip_exps."""
+    skip = set(cfg["models"][model].get("skip_exps", []))
+    return [e for e in GEN_EXPS if e not in skip]
+
+
+def e0_variants(cfg, model):
+    mcfg = cfg["models"][model]
+    return mcfg.get("e0_variants", [mcfg["reference"], "Q8_0"])
+
+
 def is_done(cfg, model, v):
     vdir = RUNS / model / v["name"]
     if not (vdir / "meta.json").exists() or not (vdir / "bench.json").exists():
         return False
-    for e in GEN_EXPS:
+    for e in model_exps(cfg, model):
         if len(read_jsonl(vdir / f"{e}.jsonl")) < len(read_jsonl(INPUTS / f"{e}.jsonl")):
             return False
     n_tf = len(read_jsonl(INPUTS / "E2.jsonl"))
@@ -139,7 +150,8 @@ def write_meta(cfg, model, v, path, info):
 def process(cfg, model, v, args):
     name = v["name"]
     reference = cfg["models"][model]["reference"]
-    if is_done(cfg, model, v) and not (name in (reference, "Q8_0")
+    exps = model_exps(cfg, model)
+    if is_done(cfg, model, v) and not (name in e0_variants(cfg, model)
                                        and not (RUNS / model / name / "E0.json").exists()):
         log(f"[{name}] already complete")
         return
@@ -147,17 +159,17 @@ def process(cfg, model, v, args):
     meta = write_meta(cfg, model, v, path, info)
     log(f"[{name}] {meta['bpw']} bpw, {meta['file_size'] / 1e9:.2f} GB")
 
-    if name in (reference, "Q8_0") and not (RUNS / model / name / "E0.json").exists():
+    if name in e0_variants(cfg, model) and not (RUNS / model / name / "E0.json").exists():
         if not e0.run(cfg, meta, path, args.device, log) and not args.ignore_e0:
             sys.exit(f"E0 failed for {name}; see runs/{model}/{name}/E0.json")
 
     vdir = RUNS / model / name
     device = args.device or cfg["llama_cpp"]["device"]
-    if run_gen.pending(model, name, GEN_EXPS):
+    if run_gen.pending(model, name, exps):
         server_info = {}
         csv_name = "resources_rerun.csv" if (vdir / "resources.json").exists() else "resources.csv"
         with ResourceSampler(device, vdir / csv_name) as sampler:
-            run_gen.run(cfg, meta, path, GEN_EXPS, args.device, log,
+            run_gen.run(cfg, meta, path, exps, args.device, log,
                         on_stop=lambda srv: server_info.update(peak_rss_mib=srv.peak_rss_mib))
         res = {"device": device, **sampler.summary(), "host_peak_rss_mib": server_info.get("peak_rss_mib")}
         res_name = "resources_rerun.json" if (vdir / "resources.json").exists() else "resources.json"

@@ -1,0 +1,14 @@
+{
+ "model": "qwen3.5-9b",
+ "variant": "Q5_K_M",
+ "group": "ladder",
+ "source": "quantize",
+ "file_size": 6467970016,
+ "n_params": 8953803264,
+ "bpw": 5.779,
+ "sha256": "9e2000b726eb15e791b33ab4024fcd57e42e94cb8f28c3c019b48ee0f99f4de8",
+ "llama_cpp_commit": "bed0a856606ee4a24a164066f73d2379447033f5",
+ "backend": "sycl",
+ "quant_type": "Q5_K_M",
+ "imatrix": "none"
+}

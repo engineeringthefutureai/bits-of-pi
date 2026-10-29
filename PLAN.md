@@ -135,7 +135,7 @@ Each hypothesis ends as **confirmed / rejected / unclear** with the figure that 
 | H2 margins explain flips | `figures/<m>_H2_margins.png`, `_H2_kl.png` | top-1 flips concentrate at low-margin positions; KL grows ~4× per bit removed |
 | H3 copying robust | `figures/<m>_H3_E3.png`, `_H3_E4.png` | E3 near zero down to Q3; errors mostly ins/del in runs |
 | H4 scheme matters | headline table pairs | K > Q4_0 and imatrix > plain, both widest at ≤ 3 bits |
-| H5 size buys headroom | combined H1 figure (Phase 4) | larger model's cliff at fewer bits |
+| H5 size buys headroom | `figures/H5_model_size.png` | larger model's cliff at fewer bits |
 | H6 arbitration shifts | `figures/<m>_H6_planted.png` | `memory` share rises as bpw falls |
 
 ## Phases
@@ -143,7 +143,10 @@ Each hypothesis ends as **confirmed / rejected / unclear** with the figure that 
 - **Phase 0, setup:** done. Scripts, inputs, `tf_dump`, tests, smoke test on unsloth Q4_K_M.
 - **Phase 1, 4B:** BF16 + Q8_0 first (E0 gate), then the remaining 27 variants;
   headline table + H1/H2 figures; **stop for review**.
-- **Phase 2, 9B:** BF16 safetensors are local; check for an unsloth repo, else convert.
+- **Phase 2, 9B:** 19 variants: unsloth's BF16 (reference) and 12 published files, plus a
+  plain no-imatrix ladder (Q6_K, Q5_K_M, Q4_K_M, Q3_K_M, Q2_K) and Q2_K with our imatrix. The
+  plain ladder gives H5 a like-for-like comparison across sizes; the imatrix/recipe breakdown
+  (H4) was answered on the 4B and is not repeated. The original E4 is skipped (E4b replaces it).
 - **Phase 3, 27B:** Q8_0-from-FP8 reference, reduced set.
 - **Phase 4:** cross-model figures and the hypothesis report.
 

@@ -83,4 +83,38 @@ models:
       - {name: us_UD-IQ3_XXS,  group: unsloth, source: hf, file: Qwen3.5-4B-UD-IQ3_XXS.gguf}
       - {name: us_UD-IQ2_XXS,  group: unsloth, source: hf, file: Qwen3.5-4B-UD-IQ2_XXS.gguf}
 
-  # Phase 2/3 entries are added after the 4B review.
+  # Phase 2: unsloth files plus a plain no-imatrix ladder for the size comparison (H5).
+  # The imatrix/recipe breakdown (H4) was answered on the 4B and is not repeated.
+  qwen3.5-9b:
+    hf_repo: unsloth/Qwen3.5-9B-GGUF
+    reference: BF16
+    unsloth_imatrix: imatrix_unsloth.gguf_file
+    skip_exps: [E4]                 # superseded by E4b (see PLAN.md)
+    e0_variants: [BF16, us_Q8_0]    # no DIY Q8_0 in this set
+    variants:
+      - {name: BF16,           group: reference, source: hf, file: Qwen3.5-9B-BF16.gguf}
+
+      # DIY ladder, no imatrix (H1, H5)
+      - {name: Q6_K,           group: ladder,  source: quantize, type: Q6_K}
+      - {name: Q5_K_M,         group: ladder,  source: quantize, type: Q5_K_M}
+      - {name: Q4_K_M,         group: ladder,  source: quantize, type: Q4_K_M}
+      - {name: Q3_K_M,         group: ladder,  source: quantize, type: Q3_K_M}
+      - {name: Q2_K,           group: ladder,  source: quantize, type: Q2_K}
+      # the one place an imatrix changed everything on the 4B
+      - {name: Q2_K_imat,      group: imatrix, source: quantize, type: Q2_K,    imatrix: own}
+
+      # unsloth prequantized
+      - {name: us_Q8_0,        group: unsloth, source: hf, file: Qwen3.5-9B-Q8_0.gguf}
+      - {name: us_Q6_K,        group: unsloth, source: hf, file: Qwen3.5-9B-Q6_K.gguf}
+      - {name: us_Q5_K_M,      group: unsloth, source: hf, file: Qwen3.5-9B-Q5_K_M.gguf}
+      - {name: us_Q4_K_M,      group: unsloth, source: hf, file: Qwen3.5-9B-Q4_K_M.gguf}
+      - {name: us_Q4_0,        group: unsloth, source: hf, file: Qwen3.5-9B-Q4_0.gguf}
+      - {name: us_IQ4_XS,      group: unsloth, source: hf, file: Qwen3.5-9B-IQ4_XS.gguf}
+      - {name: us_Q3_K_M,      group: unsloth, source: hf, file: Qwen3.5-9B-Q3_K_M.gguf}
+      - {name: us_UD-Q4_K_XL,  group: unsloth, source: hf, file: Qwen3.5-9B-UD-Q4_K_XL.gguf}
+      - {name: us_UD-Q3_K_XL,  group: unsloth, source: hf, file: Qwen3.5-9B-UD-Q3_K_XL.gguf}
+      - {name: us_UD-Q2_K_XL,  group: unsloth, source: hf, file: Qwen3.5-9B-UD-Q2_K_XL.gguf}
+      - {name: us_UD-IQ3_XXS,  group: unsloth, source: hf, file: Qwen3.5-9B-UD-IQ3_XXS.gguf}
+      - {name: us_UD-IQ2_XXS,  group: unsloth, source: hf, file: Qwen3.5-9B-UD-IQ2_XXS.gguf}
+
+  # Phase 3 (27B) is added after the 9B review.

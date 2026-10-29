@@ -3,6 +3,7 @@
 import json
 import os
 import shlex
+import statistics
 import subprocess
 import time
 from pathlib import Path
@@ -229,6 +230,10 @@ class ResourceSampler:
             "vram_baseline_mib": self.baseline,
             "vram_peak_mib": max(used) if used else None,
             "vram_delta_mib": (max(used) - self.baseline) if used and self.baseline is not None else None,
+            # the peak can catch a transient staging spike while the model loads; the median is the
+            # steady footprint during the tests
+            "vram_steady_delta_mib": (statistics.median(used) - self.baseline)
+            if used and self.baseline is not None else None,
             "power_mean_w": sum(power) / len(power) if power else None,
             "power_peak_w": max(power) if power else None,
             "mem_bw_util_mean_pct": sum(bw) / len(bw) if bw else None,

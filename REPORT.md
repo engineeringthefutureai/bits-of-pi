@@ -23,7 +23,7 @@ model it runs about 0.3–0.4 higher than the usual labels, because the large vo
 | H2 margins explain flips | **Confirmed** | Recall stops cluster on BF16's lowest-margin digits; noise grows 7.6× per bit on π ([H2](figures/qwen3.5-4b_H2_margins.png), [KL](figures/qwen3.5-4b_H2_kl.png)) |
 | H3 copying is robust; failures are skips in runs | **Confirmed** | Verbatim copy is near perfect down to 4.3 bpw for every build; errors are deletions inside runs, even at BF16 ([E3](figures/qwen3.5-4b_H3_E3.png), [E4b](figures/qwen3.5-4b_H3_E4b.png)) |
 | H4 scheme matters at equal size | **Confirmed, with a twist** | K beats Q4_0 by 3.3× on π noise; a digit-free imatrix cuts generic noise but not π noise; unsloth's recipe beats every DIY build ([H4](figures/qwen3.5-4b_H4_builds.png)) |
-| H5 size buys headroom | Not tested yet | Needs Phases 2–3 |
+| H5 size buys headroom | See [Phase 2](REPORT_9B.md) | Confirmed per bit, not per byte |
 | H6 low bits revert to memory | **Rejected, reversed** | Lower-bit models copy the planted digit *more* faithfully ([H6](figures/qwen3.5-4b_H6_planted.png)) |
 
 Practical reading for this model on this card:
@@ -201,8 +201,7 @@ server restart, and across the two GPUs.
 
 ## Next
 
-Phase 2 (Qwen 3.5 9B, BF16 safetensors local) with the same pipeline, then the 27B. H5 needs
-both. Open for review before that:
+Phase 2 (Qwen 3.5 9B) is done: see [REPORT_9B.md](REPORT_9B.md). Open questions from Phase 1:
 
 - Keep E6 for larger models, or drop it?
 - Add `--no-mmap` so host RAM measures what the model really needs?

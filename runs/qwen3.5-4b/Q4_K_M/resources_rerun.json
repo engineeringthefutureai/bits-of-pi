@@ -4,6 +4,7 @@
  "vram_baseline_mib": 46.1796875,
  "vram_peak_mib": 3396.40234375,
  "vram_delta_mib": 3350.22265625,
+ "vram_steady_delta_mib": 3346.16796875,
  "power_mean_w": 133.24197674418605,
  "power_peak_w": 141.43,
  "mem_bw_util_mean_pct": 13.826860465116278,

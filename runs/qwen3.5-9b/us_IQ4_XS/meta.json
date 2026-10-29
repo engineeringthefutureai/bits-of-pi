@@ -1,0 +1,14 @@
+{
+ "model": "qwen3.5-9b",
+ "variant": "us_IQ4_XS",
+ "group": "unsloth",
+ "source": "hf",
+ "file_size": 5168653536,
+ "n_params": 8953803264,
+ "bpw": 4.618,
+ "sha256": "7e918aeca06c52bcb528ea6b04b4ec957e75ee8c0a73138854c0dfcf371ea429",
+ "llama_cpp_commit": "bed0a856606ee4a24a164066f73d2379447033f5",
+ "backend": "sycl",
+ "hf_repo": "unsloth/Qwen3.5-9B-GGUF",
+ "hf_file": "Qwen3.5-9B-IQ4_XS.gguf"
+}

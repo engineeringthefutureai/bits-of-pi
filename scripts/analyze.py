@@ -164,11 +164,13 @@ def headline(model, cfg, rows, meta):
         }
         res = load_resources(model, v)
         b = load_bench(model, v)
-        vram = res.get("vram_delta_mib")
+        vram = res.get("vram_steady_delta_mib", res.get("vram_delta_mib"))
         row.update({
             "file_gb": round(m["file_size"] / 1e9, 2),
             "vram_mib": round(vram) if vram is not None else None,
-            # what is not weights: KV cache (8,192 tokens, f16), recurrent state, compute buffers, runtime
+            "vram_peak_mib": round(res["vram_delta_mib"]) if res.get("vram_delta_mib") is not None else None,
+            # what is not weights: KV cache (8,192 tokens, f16), recurrent state, compute buffers, runtime,
+            # minus the input token-embedding table, which llama.cpp keeps in host memory
             "vram_overhead_mib": round(vram - m["file_size"] / 2**20) if vram is not None else None,
             "host_rss_mib": round(res["host_peak_rss_mib"]) if res.get("host_peak_rss_mib") is not None else None,
             "tg_in_test_tok_s": tg_in_test(model, v),
@@ -448,6 +450,59 @@ def fig_h6(model, rows, table):
     plt.close(fig)
 
 
+MODEL_COLORS = ["#2a78d6", "#eb6834", "#1baf7a"]   # categorical slots 1-3, one per model size
+
+
+def fig_h5(models):
+    """H5: the same quant types across model sizes, from each model's headline table."""
+    tables = {}
+    for m in models:
+        p = SCORES / f"{m}_headline.csv"
+        if p.exists():
+            with open(p) as f:
+                tables[m] = [{k: (float(v) if v not in ("", "None") and k not in ("variant", "group") else v)
+                              for k, v in r.items()} for r in csv.DictReader(f)]
+    if len(tables) < 2:
+        return
+    panels = [("E1_pi", "E1 correct digits of π (median of 3)", False, "bpw"),
+              ("E1_pi", "E1 correct digits of π (median of 3)", False, "file_gb"),
+              ("E2_kl_pi", "E2 mean KL vs reference on π (nats)", True, "bpw"),
+              ("E2_kl_random", "E2 mean KL vs reference on random digits (nats)", True, "bpw")]
+    fig, axes = plt.subplots(2, 2, figsize=(12, 9.5))
+    axes = axes.ravel()
+    for ax, (key, label, log, xkey) in zip(axes, panels):
+        for (m, table), color in zip(tables.items(), MODEL_COLORS):
+            for group, ls, marker in (("ladder", "-", "o"), ("unsloth", "none", "D")):
+                pts = sorted([r for r in table if r["group"] == group and isinstance(r.get(key), float)],
+                             key=lambda r: r[xkey])
+                ax.plot([r[xkey] for r in pts], [r[key] for r in pts], linestyle=ls, marker=marker,
+                        color=color, markersize=6, markeredgecolor="white", markeredgewidth=1,
+                        alpha=1 if group == "ladder" else 0.7,
+                        label=f"{m} {'DIY ladder' if group == 'ladder' else 'unsloth files'}")
+            ref = next((r for r in table if r["group"] == "reference"), None)
+            if not log and ref and isinstance(ref.get(key), float):
+                ax.axhline(ref[key], color=color, linestyle="--", linewidth=1,
+                           label=f"{m} {ref['variant']} (reference)")
+        if log:
+            ax.set_yscale("log")
+        else:
+            ax.axhline(1200, color=MUTED, linestyle=":", linewidth=1, label="generation cap (1,200 digits)")
+        if xkey == "bpw":
+            ax.set_xlim(2.5, 9)
+            ax.set_xlabel("bits per weight")
+        else:
+            ax.set_xlim(0, 10)
+            ax.set_xlabel("file size (GB): equal memory, different model sizes")
+        ax.set_ylabel(label)
+    axes[0].set_title("same quant types, two model sizes", loc="left", color=INK)
+    axes[1].set_title("π recall by file size", loc="left", color=INK)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=4, fontsize=8, frameon=False)
+    fig.tight_layout(rect=(0, 0.06, 1, 1))
+    fig.savefig(FIGURES / "H5_model_size.png")
+    plt.close(fig)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model")
@@ -469,6 +524,7 @@ def main():
         fig_errors(model, rows, table, "E4b", "spell-as-words errors by type (clarified prompt)")
         fig_h6(model, rows, table)
         print(f"{model}: {len(table)} variants -> scores/{model}_headline.md, figures/{model}_*.png")
+    fig_h5(list(cfg["models"]))
 
 
 if __name__ == "__main__":

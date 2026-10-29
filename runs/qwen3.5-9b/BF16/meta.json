@@ -1,0 +1,14 @@
+{
+ "model": "qwen3.5-9b",
+ "variant": "BF16",
+ "group": "reference",
+ "source": "hf",
+ "file_size": 17920697312,
+ "n_params": 8953803264,
+ "bpw": 16.012,
+ "sha256": "daebe40eeea7057c1cdf35ac56d13f507d8bf12171bbb7a6b6b0d3f05439159a",
+ "llama_cpp_commit": "bed0a856606ee4a24a164066f73d2379447033f5",
+ "backend": "sycl",
+ "hf_repo": "unsloth/Qwen3.5-9B-GGUF",
+ "hf_file": "Qwen3.5-9B-BF16.gguf"
+}
