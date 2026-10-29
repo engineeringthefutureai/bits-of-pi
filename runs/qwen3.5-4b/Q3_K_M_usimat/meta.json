@@ -1,0 +1,15 @@
+{
+ "model": "qwen3.5-4b",
+ "variant": "Q3_K_M_usimat",
+ "group": "usimat",
+ "source": "quantize",
+ "file_size": 2262064320,
+ "n_params": 4205751296,
+ "bpw": 4.303,
+ "sha256": "1e490b2049ae97f0a7fbdce6b59aea3aaf215104095830f92de68a7e32d96986",
+ "llama_cpp_commit": "bed0a856606ee4a24a164066f73d2379447033f5",
+ "backend": "sycl",
+ "quant_type": "Q3_K_M",
+ "imatrix": "unsloth",
+ "imatrix_sha256": "63718abd33c6ddcbb67f9089fb8bbaf0bc9996be4e23bba14ce17dcee76924d2"
+}

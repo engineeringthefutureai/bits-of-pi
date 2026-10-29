@@ -1,0 +1,19 @@
+# external checkout (symlink) and environment
+llama.cpp
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# large or regenerable artifacts
+models/
+tools/bin/
+logs/
+data/calibration.txt
+
+# raw logs: per-request run records, per-second resource samples, server output.
+# Kept locally for re-scoring; never published. Summaries (meta, bench, resources.json, E0)
+# and derived data (scores/, tf/, figures/) are published.
+*.log
+runs/**/*.jsonl
+runs/**/*.csv

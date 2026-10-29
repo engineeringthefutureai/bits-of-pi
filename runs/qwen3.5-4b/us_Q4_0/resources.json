@@ -1,0 +1,11 @@
+{
+ "device": "level_zero:1",
+ "samples": 511,
+ "vram_baseline_mib": 48.19140625,
+ "vram_peak_mib": 3279.0859375,
+ "vram_delta_mib": 3230.89453125,
+ "power_mean_w": 123.79808219178082,
+ "power_peak_w": 127.31,
+ "mem_bw_util_mean_pct": 13.371956947162426,
+ "host_peak_rss_mib": 3192.05859375
+}

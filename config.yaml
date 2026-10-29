@@ -1,0 +1,86 @@
+# Single source of truth for the study. Scripts read everything from here.
+
+llama_cpp:
+  dir: llama.cpp                 # symlink to the checkout (gitignored)
+  build: llama.cpp/build-sycl
+  commit: bed0a856606ee4a24a164066f73d2379447033f5
+  backend: sycl
+  oneapi_setvars: /opt/intel/oneapi/setvars.sh
+  device: "level_zero:0"         # ONEAPI_DEVICE_SELECTOR; override with --device
+
+server:
+  port: 18080
+  args: [--ctx-size, "8192", --n-gpu-layers, "999", --parallel, "1",
+         --batch-size, "2048", --ubatch-size, "512",
+         --cache-type-k, f16, --cache-type-v, f16, --flash-attn, "off",
+         --seed, "42", --reasoning, "off", --cache-ram, "0", --no-webui]
+
+request:
+  temperature: 0
+  top_k: 1
+  top_p: 1.0
+  min_p: 0
+  repeat_penalty: 1.0
+  presence_penalty: 0
+  frequency_penalty: 0
+  dry_multiplier: 0
+  cache_prompt: false
+  seed: 42
+
+chat_template_kwargs:
+  enable_thinking: false
+
+seed: 20261027                   # inputs (random strings) are generated from this
+
+calibration:
+  source: llama.cpp/wikitext-2-raw/wiki.train.raw
+  max_chars: 600000
+  chunks: 200
+  ctx: 512
+
+# Variant sources:
+#   hf        download `file` from the model's hf_repo, test, delete
+#   quantize  llama-quantize from the reference GGUF; imatrix: none | own | unsloth
+models:
+  qwen3.5-4b:
+    hf_repo: unsloth/Qwen3.5-4B-GGUF
+    reference: BF16
+    unsloth_imatrix: imatrix_unsloth.gguf_file
+    variants:
+      - {name: BF16,           group: reference, source: hf, file: Qwen3.5-4B-BF16.gguf}
+
+      # DIY ladder, no imatrix (H1)
+      - {name: Q8_0,           group: ladder,  source: quantize, type: Q8_0}
+      - {name: Q6_K,           group: ladder,  source: quantize, type: Q6_K}
+      - {name: Q5_K_M,         group: ladder,  source: quantize, type: Q5_K_M}
+      - {name: Q4_K_M,         group: ladder,  source: quantize, type: Q4_K_M}
+      - {name: Q3_K_M,         group: ladder,  source: quantize, type: Q3_K_M}
+      - {name: Q2_K,           group: ladder,  source: quantize, type: Q2_K}
+      # scheme contrast (H4)
+      - {name: Q4_0,           group: scheme,  source: quantize, type: Q4_0}
+      # DIY imatrix twins, own digit-free calibration (H4)
+      - {name: Q4_K_M_imat,    group: imatrix, source: quantize, type: Q4_K_M,  imatrix: own}
+      - {name: Q3_K_M_imat,    group: imatrix, source: quantize, type: Q3_K_M,  imatrix: own}
+      - {name: Q2_K_imat,      group: imatrix, source: quantize, type: Q2_K,    imatrix: own}
+      - {name: IQ4_XS,         group: imatrix, source: quantize, type: IQ4_XS,  imatrix: own}
+      - {name: IQ3_XXS,        group: imatrix, source: quantize, type: IQ3_XXS, imatrix: own}
+      - {name: IQ2_XS,         group: imatrix, source: quantize, type: IQ2_XS,  imatrix: own}
+      # stock recipe + unsloth's imatrix: separates their calibration from their recipe
+      - {name: Q4_K_M_usimat,  group: usimat,  source: quantize, type: Q4_K_M,  imatrix: unsloth}
+      - {name: Q3_K_M_usimat,  group: usimat,  source: quantize, type: Q3_K_M,  imatrix: unsloth}
+
+      # unsloth prequantized: what people actually run
+      - {name: us_Q8_0,        group: unsloth, source: hf, file: Qwen3.5-4B-Q8_0.gguf}
+      - {name: us_Q6_K,        group: unsloth, source: hf, file: Qwen3.5-4B-Q6_K.gguf}
+      - {name: us_Q5_K_M,      group: unsloth, source: hf, file: Qwen3.5-4B-Q5_K_M.gguf}
+      - {name: us_Q4_K_M,      group: unsloth, source: hf, file: Qwen3.5-4B-Q4_K_M.gguf}
+      - {name: us_Q4_0,        group: unsloth, source: hf, file: Qwen3.5-4B-Q4_0.gguf}
+      - {name: us_IQ4_XS,      group: unsloth, source: hf, file: Qwen3.5-4B-IQ4_XS.gguf}
+      - {name: us_Q3_K_M,      group: unsloth, source: hf, file: Qwen3.5-4B-Q3_K_M.gguf}
+      - {name: us_UD-Q4_K_XL,  group: unsloth, source: hf, file: Qwen3.5-4B-UD-Q4_K_XL.gguf}
+      - {name: us_UD-Q3_K_XL,  group: unsloth, source: hf, file: Qwen3.5-4B-UD-Q3_K_XL.gguf}
+      - {name: us_UD-Q2_K_XL,  group: unsloth, source: hf, file: Qwen3.5-4B-UD-Q2_K_XL.gguf}
+      - {name: us_UD-IQ3_XXS,  group: unsloth, source: hf, file: Qwen3.5-4B-UD-IQ3_XXS.gguf}
+      - {name: us_UD-IQ2_XXS,  group: unsloth, source: hf, file: Qwen3.5-4B-UD-IQ2_XXS.gguf}
+
+  # Phase 2/3 entries are added after the 4B review.

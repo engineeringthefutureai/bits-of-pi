@@ -1,0 +1,9 @@
+mpmath
+numpy
+pandas
+pyarrow
+pyyaml
+requests
+matplotlib
+huggingface_hub
+pytest
