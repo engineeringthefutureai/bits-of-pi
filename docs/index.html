@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qwen 3.5 4B Digit Recall</title>
+<meta name="description" content="How 28 quantizations of Qwen 3.5 4B affect reciting π, copying digits and choosing prompt over memory, with VRAM and speed trade-offs.">
+<meta name="author" content="Kiryl Dubarenka">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Qwen 3.5 4B Digit Recall">
+<meta property="og:description" content="How 28 quantizations of Qwen 3.5 4B affect reciting π, copying digits and choosing prompt over memory, with VRAM and speed trade-offs.">
+<meta property="og:url" content="https://engineeringthefutureai.github.io/bits-of-pi/">
+<meta property="og:image" content="https://engineeringthefutureai.github.io/bits-of-pi/figures/qwen3.5-4b_H1_recall.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232a78d6'/%3E%3Ctext x='32' y='46' font-family='Georgia,serif' font-size='44' text-anchor='middle' fill='white'%3E%CF%80%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+/* Layout: one reading column (~68ch) with full-width figure plates and tables that scroll in place. */
+:root {
+  --bg: #f6f7f8;
+  --surface: #ffffff;
+  --ink: #15191e;
+  --muted: #5a6370;
+  --rule: #dde1e6;
+  --accent: #2a78d6;
+  --warn: #b4531a;
+  --good: #1b7f5a;
+  --plate: #ffffff;
+  --digit-bg: #eef1f4;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161b; --surface: #1a1f26; --ink: #e8ebef; --muted: #a2abb7; --rule: #2c333c;
+    --accent: #5b9cf0; --warn: #f0935a; --good: #4cc596; --plate: #f6f7f8; --digit-bg: #222932;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161b; --surface: #1a1f26; --ink: #e8ebef; --muted: #a2abb7; --rule: #2c333c;
+  --accent: #5b9cf0; --warn: #f0935a; --good: #4cc596; --plate: #f6f7f8; --digit-bg: #222932;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 72px;
+}
+main { max-width: 880px; margin: 0 auto; display: grid; gap: 56px; }
+section { display: grid; gap: 16px; min-width: 0; }
+.prose { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 2.8rem); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.6rem; font-weight: 700; }
+h3 { font-size: 1.15rem; font-weight: 600; }
+p, ul { margin: 0; }
+ul { padding-left: 1.2em; display: grid; gap: 6px; }
+.eyebrow { font-family: var(--font-data); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 1.15rem; color: var(--muted); max-width: 62ch; }
+.meta { font-family: var(--font-data); font-size: 0.82rem; color: var(--muted); }
+code, .num { font-family: var(--font-data); font-size: 0.9em; }
+.num { font-variant-numeric: tabular-nums; }
+a { color: var(--accent); }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-family: var(--font-data); font-size: 0.74rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.r, th.r { text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.ref td { font-weight: 600; }
+.verdict { display: inline-block; font-family: var(--font-data); font-size: 0.74rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; border: 1px solid currentColor; white-space: nowrap; }
+.v-yes { color: var(--good); }
+.v-no { color: var(--warn); }
+.v-open { color: var(--muted); }
+
+figure { margin: 0; display: grid; gap: 8px; }
+figure .plate { background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; padding: 8px; }
+figure img { display: block; width: 100%; height: auto; }
+figcaption { font-size: 0.88rem; color: var(--muted); max-width: 72ch; }
+
+.takeaways { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.takeaway { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 14px 16px; display: grid; gap: 4px; align-content: start; }
+.takeaway b { font-family: var(--font-display); font-size: 1.05rem; }
+.takeaway span { color: var(--muted); font-size: 0.92rem; }
+
+/* the two knife-edge digits of pi */
+.ruler { display: grid; gap: 14px; }
+.ruler-row { display: grid; gap: 6px; min-width: 0; }
+.ruler-label { font-family: var(--font-data); font-size: 0.8rem; color: var(--muted); }
+.digits { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; }
+.d { flex: 0 0 auto; width: 46px; display: grid; justify-items: center; gap: 2px; padding: 6px 0 5px; border-radius: 4px; background: var(--digit-bg); }
+.d .g { font-family: var(--font-data); font-size: 1.35rem; font-weight: 600; line-height: 1.1; }
+.d .m { font-family: var(--font-data); font-size: 0.7rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.d.edge { background: var(--accent); }
+.d.edge .g, .d.edge .m { color: #ffffff; }
+.d .p { font-family: var(--font-data); font-size: 0.62rem; color: var(--muted); }
+.d.edge .p { color: #ffffff; }
+
+footer { display: grid; gap: 6px; font-size: 0.88rem; color: var(--muted); }
+hr { border: 0; border-top: 1px solid var(--rule); margin: 0; }
+@media (max-width: 520px) { body { font-size: 15px; padding-block: 24px 48px; } main { gap: 44px; } }
+</style>
+</head>
+<body>
+
+<main>
+  <header style="display:grid; gap:14px;">
+    <div class="eyebrow">Quantization and digit recall · Phase 1</div>
+    <h1>Qwen 3.5 4B Digit Recall</h1>
+    <p class="lede">28 builds of one 4B model, from BF16 down to 2.9 bits per weight, tested on reciting π from memory, copying digits from the prompt, and choosing between the two.</p>
+    <p class="meta">Kiryl Dubarenka · llama.cpp bed0a8566 · SYCL · one Arc Pro B60 · greedy decoding · 3,360 scored requests + 112 teacher-forced passes</p>
+  </header>
+
+  <section>
+    <h2>Verdicts</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Hypothesis</th><th>Verdict</th><th>Deciding evidence</th></tr></thead>
+        <tbody>
+          <tr><td>H1 · Recall holds to ~4 bits, then falls off a cliff</td><td><span class="verdict v-no">Rejected</span></td><td>π recall declines from 6.6 bits per weight down; no flat stretch</td></tr>
+          <tr><td>H2 · Errors start where margins are thinnest</td><td><span class="verdict v-yes">Confirmed</span></td><td>Recall stops pile up on BF16's lowest-margin digits; noise grows 7.6× per bit</td></tr>
+          <tr><td>H3 · Copying is robust; failures are skips in runs</td><td><span class="verdict v-yes">Confirmed</span></td><td>Verbatim copy near-perfect to 4.3 bpw; errors are deletions inside runs, even at BF16</td></tr>
+          <tr><td>H4 · Scheme matters at equal size</td><td><span class="verdict v-yes">Confirmed</span></td><td>K beats Q4_0 3.3×; unsloth's recipe beats every stock build; digit-free imatrix doesn't protect π</td></tr>
+          <tr><td>H5 · Bigger models hold out to fewer bits</td><td><span class="verdict v-open">Not yet</span></td><td>Needs the 9B and 27B phases</td></tr>
+          <tr><td>H6 · Low bits revert to memory over the prompt</td><td><span class="verdict v-no">Reversed</span></td><td>Low-bit models copy a planted wrong digit <em>more</em> faithfully</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="takeaways">
+      <div class="takeaway"><b>Q8_0 is free</b><span>Same answers as BF16 on every task, 1.7× faster decode, 43% less VRAM.</span></div>
+      <div class="takeaway"><b>Exact recall wants Q6_K+</b><span>Noise on memorized digits grows ~7.6× per bit removed; π recall halves between Q6_K and Q5_K_M.</span></div>
+      <div class="takeaway"><b>Copying survives to Q3</b><span>And to Q2_K with an imatrix. Plain Q2_K and stock IQ3/IQ2 builds break.</span></div>
+      <div class="takeaway"><b>Pick unsloth over stock</b><span>Same type, same size, about half the noise on π at Q4_K_M and Q3_K_M.</span></div>
+      <div class="takeaway"><b>Avoid IQ types on SYCL</b><span>IQ3_XXS decodes at 35–38 tokens/s, slower than BF16.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">H1 · free recall</div>
+    <h2>Recall declines early and steadily</h2>
+    <p class="prose">BF16 recites <b>1,000 correct digits of π</b> (and stops there because the prompt asks for 1,000), 192 of e and 105 of √2. π has the runway, so it carries H1. Every stock quant below Q8_0 loses digits, and there is no plateau down to 4 bits: recall falls below half the reference at Q5_K_M (5.9 bits per weight).</p>
+    <figure>
+      <div class="plate"><img src="figures/qwen3.5-4b_H1_recall.png" alt="Correct digits of π against bits per weight for all 28 variants; the stock ladder falls from 1000 at Q8_0 to 813, 428, 123, 88 and 0."></div>
+      <figcaption>Digits of π recited before the first error, median of 3 phrasings (whiskers min–max). Dashed line: BF16 reference. The line joins the stock ladder built without an imatrix.</figcaption>
+    </figure>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Stock ladder</th><th class="r">Bits/weight</th><th class="r">π digits</th><th class="r">KL on π</th><th class="r">KL on random digits</th></tr></thead>
+        <tbody>
+          <tr class="ref"><td>BF16 (reference)</td><td class="r">16.0</td><td class="r">1000</td><td class="r">0</td><td class="r">0</td></tr>
+          <tr><td>Q8_0</td><td class="r">8.5</td><td class="r">1000</td><td class="r">0.00013</td><td class="r">0.00008</td></tr>
+          <tr><td>Q6_K</td><td class="r">6.6</td><td class="r">813</td><td class="r">0.0011</td><td class="r">0.0012</td></tr>
+          <tr><td>Q5_K_M</td><td class="r">5.9</td><td class="r">428</td><td class="r">0.0075</td><td class="r">0.0012</td></tr>
+          <tr><td>Q4_K_M</td><td class="r">5.2</td><td class="r">123</td><td class="r">0.039</td><td class="r">0.0033</td></tr>
+          <tr><td>Q3_K_M</td><td class="r">4.3</td><td class="r">88</td><td class="r">0.35</td><td class="r">0.0059</td></tr>
+          <tr><td>Q2_K</td><td class="r">3.6</td><td class="r">0</td><td class="r">2.30</td><td class="r">0.045</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">Memorized digits are far more fragile than ordinary digit prediction. At Q4_K_M the noise on π is 12× the noise on random digits, and it grows 7.6× per bit removed against 3.2× for random digits. Bits per weight are measured from each file; they run 0.3–0.4 above the usual labels because this model's large vocabulary layers stay at higher precision.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">H2 · teacher-forced margins</div>
+    <h2>Errors start at a few knife-edge digits</h2>
+    <p class="prose">Feeding the true digits and reading the logits gives each position a margin: how far the right digit leads its best competitor. BF16 gets all 1,000 positions right with a median margin of 9.2 nats, but a handful of digits are nearly tied. Those are where recall breaks first.</p>
+    <div class="ruler" aria-label="Digits of π around positions 326 and 813 with BF16 margins">
+      <div class="ruler-row">
+        <div class="ruler-label">π decimals 320–332 · BF16 margin in nats</div>
+        <div class="digits">
+          <div class="d"><span class="g">4</span><span class="m">7.4</span><span class="p">320</span></div>
+          <div class="d"><span class="g">8</span><span class="m">13.1</span><span class="p">321</span></div>
+          <div class="d"><span class="g">8</span><span class="m">11.3</span><span class="p">322</span></div>
+          <div class="d"><span class="g">1</span><span class="m">9.5</span><span class="p">323</span></div>
+          <div class="d"><span class="g">5</span><span class="m">8.8</span><span class="p">324</span></div>
+          <div class="d"><span class="g">2</span><span class="m">8.6</span><span class="p">325</span></div>
+          <div class="d edge"><span class="g">0</span><span class="m">1.3</span><span class="p">326</span></div>
+          <div class="d"><span class="g">9</span><span class="m">11.2</span><span class="p">327</span></div>
+          <div class="d"><span class="g">2</span><span class="m">8.6</span><span class="p">328</span></div>
+          <div class="d"><span class="g">0</span><span class="m">8.6</span><span class="p">329</span></div>
+          <div class="d"><span class="g">9</span><span class="m">12.2</span><span class="p">330</span></div>
+          <div class="d"><span class="g">6</span><span class="m">8.8</span><span class="p">331</span></div>
+          <div class="d"><span class="g">2</span><span class="m">7.9</span><span class="p">332</span></div>
+        </div>
+      </div>
+      <div class="ruler-row">
+        <div class="ruler-label">π decimals 807–819</div>
+        <div class="digits">
+          <div class="d"><span class="g">4</span><span class="m">9.2</span><span class="p">807</span></div>
+          <div class="d"><span class="g">5</span><span class="m">10.0</span><span class="p">808</span></div>
+          <div class="d"><span class="g">5</span><span class="m">6.6</span><span class="p">809</span></div>
+          <div class="d"><span class="g">3</span><span class="m">11.8</span><span class="p">810</span></div>
+          <div class="d"><span class="g">4</span><span class="m">15.1</span><span class="p">811</span></div>
+          <div class="d"><span class="g">6</span><span class="m">8.8</span><span class="p">812</span></div>
+          <div class="d edge"><span class="g">9</span><span class="m">0.1</span><span class="p">813</span></div>
+          <div class="d"><span class="g">0</span><span class="m">6.0</span><span class="p">814</span></div>
+          <div class="d"><span class="g">8</span><span class="m">10.9</span><span class="p">815</span></div>
+          <div class="d"><span class="g">3</span><span class="m">4.0</span><span class="p">816</span></div>
+          <div class="d"><span class="g">0</span><span class="m">5.0</span><span class="p">817</span></div>
+          <div class="d"><span class="g">2</span><span class="m">8.4</span><span class="p">818</span></div>
+          <div class="d"><span class="g">6</span><span class="m">9.8</span><span class="p">819</span></div>
+        </div>
+      </div>
+      <p class="meta">Position n is the digit after n correct decimals, so a recall that stops at position 326 recited 326 digits.</p>
+    </div>
+    <ul class="prose">
+      <li>Of 77 π recalls that stopped early, the most common stops are positions 326 (8 runs), 88 (7), and 821, 10, 87 and 123 (4 each). The median stop sits at the 12th percentile of BF16's margins.</li>
+      <li>At high bits, errors appear only at the thinnest margins: Q6_K's two teacher-forced errors are at 813 and 821. At Q4_K_M the 14 errors sit at the 7.6th percentile of margin. From Q3_K_M down, the noise exceeds most margins and errors spread everywhere.</li>
+      <li>This also explains why recall is so uneven between neighbouring quants: our Q6_K recites 813 digits and unsloth's Q6_K 326, with almost the same noise. Both sit on the edge at digit 326 and pass or fail on it.</li>
+    </ul>
+    <figure>
+      <div class="plate"><img src="figures/qwen3.5-4b_H2_margins.png" alt="BF16 margin along the 1000 digits of π, and for each variant the positions where its teacher-forced top-1 digit is wrong."></div>
+      <figcaption>Top: BF16 margin along π. Bottom: one row per variant, a dot wherever its top-1 digit is wrong under teacher forcing. Dots appear first in the low-margin columns (326, 813) and fill in as bits drop.</figcaption>
+    </figure>
+    <figure>
+      <div class="plate"><img src="figures/qwen3.5-4b_H2_kl.png" alt="Mean KL divergence from BF16 on the π text against bits per weight, on a log scale."></div>
+      <figcaption>Noise added by quantization (mean KL divergence from BF16 on the π text, log scale). It rises smoothly; the steps in recall come from the digits, not from a threshold in bits.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="eyebrow">H3 · copying from the prompt</div>
+    <h2>Copying holds; its failures are skips inside runs</h2>
+    <p class="prose"><b>Verbatim copy (E3).</b> 40 random strings of 100 to 1,000 digits. BF16 makes 3 errors in 17,000 digits. Every build at 4.3 bits per weight or more copies 1,000-digit strings perfectly. Only three builds break, and the same quant types survive when built differently:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Variant</th><th class="r">Bits/weight</th><th class="r">Errors / 100 digits</th><th class="r">On 1,000-digit strings</th><th>Failure</th></tr></thead>
+        <tbody>
+          <tr><td>Q2_K, no imatrix</td><td class="r">3.6</td><td class="r">59</td><td class="r">99</td><td>Gives up; mostly deletions</td></tr>
+          <tr><td>IQ3_XXS, our imatrix</td><td class="r">3.6</td><td class="r">9.0</td><td class="r">36</td><td>Drops whole chunks</td></tr>
+          <tr><td>IQ2_XS, our imatrix</td><td class="r">3.1</td><td class="r">12</td><td class="r">39</td><td>Mixed</td></tr>
+          <tr><td>Q2_K + our imatrix</td><td class="r">3.6</td><td class="r">0.06</td><td class="r">0</td><td>Works</td></tr>
+          <tr><td>unsloth UD-IQ3_XXS</td><td class="r">3.7</td><td class="r">0.03</td><td class="r">0</td><td>Works</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose"><b>Spelling as words (E4b).</b> Even BF16 drops digits inside runs: run-heavy strings get 2.2 errors per 100 digits against 0.3 on plain random ones, and 75 of BF16's 80 errors are deletions inside runs of 3 or more equal digits ("eight eight eight eight eight", written one short). That stays unchanged down to about 4.3 bits per weight. Below it, failures turn into <b>insertions</b>, with the model looping on a word. Substitutions stay rare except in builds that collapse.</p>
+    <figure>
+      <div class="plate"><img src="figures/qwen3.5-4b_H3_E4b.png" alt="Spell-as-words errors per variant, split into substitutions, insertions and deletions."></div>
+      <figcaption>Spell-as-words errors per variant, stacked by type. Low-bit builds fail by repeating words (insertions); plain Q2_K stops writing (deletions).</figcaption>
+    </figure>
+    <p class="prose">The original E4 prompt ("write each digit as an English word") failed as a test: the model read it as "say this number" and answered "twenty trillion two hundred…", even at BF16. Those records are kept; E4b adds one example ("507 becomes: five zero seven") and replaces it in the results.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">H4 · scheme, imatrix, recipe</div>
+    <h2>The recipe matters more than the calibration</h2>
+    <p class="prose">Each quant type was built several ways: stock with no imatrix, with our digit-free imatrix, with unsloth's imatrix, and unsloth's published file.</p>
+    <figure>
+      <div class="plate"><img src="figures/qwen3.5-4b_H4_builds.png" alt="For each quant type, π digits and KL on π for each build: stock, own imatrix, unsloth imatrix, unsloth file."></div>
+      <figcaption>One row per quant type, one marker per build. Left: digits of π recited (dashed line, BF16). Right: noise on the π text, log scale.</figcaption>
+    </figure>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Build of Q4_K_M</th><th class="r">π digits</th><th class="r">KL on π</th><th class="r">KL on random</th></tr></thead>
+        <tbody>
+          <tr><td>Stock, no imatrix</td><td class="r">123</td><td class="r">0.039</td><td class="r">0.0033</td></tr>
+          <tr><td>+ our digit-free imatrix</td><td class="r">123</td><td class="r">0.049</td><td class="r">0.0016</td></tr>
+          <tr><td>+ unsloth's imatrix</td><td class="r">220</td><td class="r">0.041</td><td class="r">0.0024</td></tr>
+          <tr><td>unsloth's file</td><td class="r">326</td><td class="r">0.022</td><td class="r">0.0019</td></tr>
+          <tr><td>unsloth UD-Q4_K_XL (+6% size)</td><td class="r">326</td><td class="r">0.014</td><td class="r">0.0013</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul class="prose">
+      <li><b>Scheme:</b> at the same size class, legacy Q4_0 has 3.3× the π noise of Q4_K_M.</li>
+      <li><b>Imatrix:</b> ours, calibrated on text with no digit strings, halves generic noise at Q4_K_M but does not protect π; noise on π even rises. An importance matrix protects what its calibration text exercises. At 2–3 bits it matters for everything: it separates a Q2_K that cannot copy from one that can.</li>
+      <li><b>Recipe:</b> stock Q4_K_M with unsloth's imatrix gets little of unsloth's advantage (KL on π 0.041 vs 0.022). Most of the gain is their per-tensor type choices. Q3_K_M shows the same: 0.29 with their imatrix, 0.17 with their file.</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="eyebrow">H6 · prompt vs memory</div>
+    <h2>Low bits weaken memory's pull</h2>
+    <p class="prose">E5 asks for a copy of π or e with one digit changed. Only π position 10 separates the variants: BF16 and almost every build at 4.6 bits per weight or more "correct" it to the memorized digit, while almost every build at 4.4 or below copies the prompt faithfully. This is the opposite of H6, and consistent with H1: quantization erodes memorized content, so it competes less with the prompt.</p>
+    <figure>
+      <div class="plate"><img src="figures/qwen3.5-4b_H6_planted.png" alt="For each variant, how many of 8 planted-error sequences copied the prompt, wrote the memorized digit, or something else."></div>
+      <figcaption>Outcome at the planted digit, 8 sequences per variant. Exceptions to the trend: our Q4_K_M_imat and unsloth Q4_0 copy at ~5 bpw; our IQ3_XXS and unsloth UD-IQ3_XXS revert; plain Q2_K fails to copy at all.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="eyebrow">Resources and speed</div>
+    <h2>What it takes to run each build</h2>
+    <p class="prose">One Arc Pro B60 (24 GB), llama.cpp SYCL, 8,192-token f16 KV cache. Decode speed is the median the server reported on the test requests (within 0–5% of <code>llama-bench</code> tg128). Prompt speed is <code>llama-bench</code> at 4,096 tokens, since SYCL's per-request overhead makes short-prompt timings misleading.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Variant</th><th class="r">File GB</th><th class="r">VRAM GiB</th><th class="r">Decode tok/s</th><th class="r">Prompt tok/s</th><th class="r">Power W</th></tr></thead>
+        <tbody>
+          <tr class="ref"><td>BF16 (reference)</td><td class="r">8.42</td><td class="r">8.6</td><td class="r">38</td><td class="r">1,087</td><td class="r">120</td></tr>
+          <tr><td>Q8_0</td><td class="r">4.48</td><td class="r">4.9</td><td class="r">65</td><td class="r">2,964</td><td class="r">127</td></tr>
+          <tr><td>Q6_K</td><td class="r">3.46</td><td class="r">4.0</td><td class="r">76</td><td class="r">2,984</td><td class="r">147</td></tr>
+          <tr><td>Q5_K_M</td><td class="r">3.07</td><td class="r">3.6</td><td class="r">81</td><td class="r">3,092</td><td class="r">142</td></tr>
+          <tr><td>Q4_K_M</td><td class="r">2.71</td><td class="r">3.3</td><td class="r">89</td><td class="r">2,807</td><td class="r">138</td></tr>
+          <tr><td>unsloth UD-Q4_K_XL</td><td class="r">2.91</td><td class="r">3.5</td><td class="r">78</td><td class="r">2,838</td><td class="r">132</td></tr>
+          <tr><td>IQ4_XS</td><td class="r">2.51</td><td class="r">3.1</td><td class="r">65</td><td class="r">2,223</td><td class="r">130</td></tr>
+          <tr><td>Q3_K_M</td><td class="r">2.26</td><td class="r">2.9</td><td class="r">85</td><td class="r">2,332</td><td class="r">139</td></tr>
+          <tr><td>unsloth UD-IQ3_XXS</td><td class="r">1.95</td><td class="r">2.6</td><td class="r">35</td><td class="r">1,674</td><td class="r">113</td></tr>
+          <tr><td>Q2_K</td><td class="r">1.92</td><td class="r">2.5</td><td class="r">91</td><td class="r">2,617</td><td class="r">136</td></tr>
+          <tr><td>unsloth UD-IQ2_XXS</td><td class="r">1.52</td><td class="r">2.2</td><td class="r">53</td><td class="r">1,693</td><td class="r">129</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul class="prose">
+      <li><b>VRAM is the file size plus about 770 MiB</b> for every build (KV cache, recurrent state, buffers). A 4 GB card fits everything up to Q5_K_M with an 8k context; BF16 needs about 9 GB.</li>
+      <li><b>Decode stops getting faster below about 5 bits.</b> 38 → 65 → 89 tokens/s from BF16 to Q8_0 to Q4_K_M, then flat to Q2_K. Smaller quants of a 4B model buy memory here, not speed.</li>
+      <li><b>IQ types are slow on SYCL.</b> Their codebook lookups cost more than the bytes they save; UD-XL mixes cost 12–28% decode against plain K-quants of similar size.</li>
+    </ul>
+    <figure>
+      <div class="plate"><img src="figures/qwen3.5-4b_vram_quality.png" alt="Digits of π and KL on π against VRAM used, for all variants."></div>
+      <figcaption>Quality against the VRAM each build needs. Left: digits of π. Right: noise on π, log scale.</figcaption>
+    </figure>
+    <figure>
+      <div class="plate"><img src="figures/qwen3.5-4b_speed.png" alt="Decode and prompt processing speed against bits per weight."></div>
+      <figcaption>Decode during the tests (left) and prompt processing at 4,096 tokens (right).</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="eyebrow">Method notes</div>
+    <h2>Problems found along the way</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Issue</th><th>Handling</th></tr></thead>
+        <tbody>
+          <tr><td>E4 prompt read as "say this number"</td><td>Kept as recorded; E4b with an explicit example rerun on all 28 builds</td></tr>
+          <tr><td>E6 (recall π as words): even BF16 counts "zero one two three…"</td><td>Reported as a capability floor for the 4B</td></tr>
+          <tr><td>"e to 1000 decimal places: 2." answered with 1,200 zeros at BF16</td><td>Real model behaviour; results reported per constant, π carries H1</td></tr>
+          <tr><td>Server host-RAM prompt cache</td><td>Disabled and the whole study rerun</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">Determinism checks passed on BF16 and Q8_0: identical bytes on repeated requests, after a server restart, and across both GPUs. Our Q8_0 and unsloth's Q8_0 agree to KL 0.00013, so the pipeline adds no error of its own.</p>
+  </section>
+
+  <hr>
+  <section>
+    <h3>Next</h3>
+    <ul class="prose">
+      <li>Phase 2: Qwen 3.5 9B with the same pipeline, then the 27B, to test H5.</li>
+      <li>Open questions: keep E6 for larger models? Calibrate the imatrix on "generic text plus some numbers" to make the H4 comparison fairer?</li>
+    </ul>
+  </section>
+  <footer>
+    <p>Source, data and full method: <a href="https://github.com/engineeringthefutureai/bits-of-pi">github.com/engineeringthefutureai/bits-of-pi</a> · <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/REPORT.md">REPORT.md</a> · <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/PLAN.md">PLAN.md</a></p>
+    <p>Code under the MIT License.</p>
+  </footer>
+</main>
+</body>
+</html>

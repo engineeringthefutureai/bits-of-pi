@@ -2,6 +2,8 @@
 
 Kiryl Dubarenka
 
+Web version: [engineeringthefutureai.github.io/bits-of-pi](https://engineeringthefutureai.github.io/bits-of-pi/)
+
 28 variants of one model, from BF16 (16 bits per weight) down to 2.9 bits per weight, run
 through the same llama.cpp build (`bed0a8566`, SYCL, one Arc Pro B60) with greedy decoding.
 Every number here comes from the scored rows in `scores/`, the per-position E2 records in

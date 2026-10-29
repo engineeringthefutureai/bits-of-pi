@@ -2,6 +2,8 @@
 
 *Quantization and digit recall: how many digits of π survive each bit removed.*
 
+**Results: [engineeringthefutureai.github.io/bits-of-pi](https://engineeringthefutureai.github.io/bits-of-pi/)**
+
 How does weight quantization damage exact, low-margin token decisions? This repo measures it
 with digit sequences on Qwen 3.5/3.8 GGUF models across 28 variants, from BF16 down to
 ~2 bits per weight, run through llama.cpp.
@@ -29,6 +31,7 @@ runs/<model>/<variant>/              per-variant summaries: file, bench, resourc
 tf/<model>/<variant>/<text>.parquet   E2 per-digit-position records
 scores/              scored rows and headline tables
 figures/             one figure per hypothesis
+docs/                GitHub Pages site (index.html + copies of its figures)
 scripts/             make_inputs, pipeline, run_gen, run_tf, e0, score, analyze
 tools/tf_dump.cpp    teacher-forced logit dump, linked to the pinned llama.cpp build
 tests/               unit tests for extraction and alignment
@@ -50,6 +53,7 @@ tools/build.sh                         # builds tools/bin/tf_dump against the pi
 .venv/bin/python scripts/pipeline.py --model qwen3.5-4b       # download/quantize -> run -> delete
 .venv/bin/python scripts/score.py --model qwen3.5-4b
 .venv/bin/python scripts/analyze.py --model qwen3.5-4b
+.venv/bin/python scripts/build_site.py                 # refresh docs/figures for the site
 ```
 
 Raw logs (per-request records in `runs/**/*.jsonl`, per-second resource samples, server
