@@ -280,16 +280,19 @@ def fig_h2(model, cfg, table):
     variants = [reference] + [r["variant"] for r in table if r["variant"] != reference]
     fig, (a1, a2) = plt.subplots(2, 1, figsize=(9, 3 + 0.22 * len(variants)), sharex=True,
                                  gridspec_kw={"height_ratios": [2, max(2, 0.22 * len(variants))]})
+    # shown as odds: a margin of m nats means the right digit is e^m times as likely as the runner-up
     m = ref["margin"].to_numpy()
-    a1.plot(ref["pos"], m, color=GRID, linewidth=0.8)
+    a1.plot(ref["pos"], np.exp(m), color=GRID, linewidth=0.8)
     k = 25
     # divide by the window actually covered, so the ends are not dragged toward zero by padding
     smooth = np.convolve(m, np.ones(k), mode="same") / np.convolve(np.ones_like(m), np.ones(k), mode="same")
-    a1.plot(ref["pos"], smooth, color=GROUP_STYLE["ladder"]["color"],
-            label=f"{reference} (reference) margin, {k}-digit moving average")
-    a1.axhline(0, color=MUTED, linewidth=0.8)
-    a1.set_ylabel("margin (nats)")
-    a1.set_title(f"{model}: π margin under teacher forcing, and each variant's wrong digits",
+    a1.plot(ref["pos"], np.exp(smooth), color=GROUP_STYLE["ladder"]["color"],
+            label=f"{reference} (reference), {k}-digit moving average")
+    a1.axhline(1, color=MUTED, linewidth=0.8)
+    a1.set_yscale("log")
+    a1.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:,.0f}×"))
+    a1.set_ylabel("right digit vs runner-up,\ntimes more likely (log)")
+    a1.set_title(f"{model}: how sure the reference is of each π digit, and who gets it wrong",
                  loc="left", color=INK)
     a1.legend(loc="upper right")
     for i, v in enumerate(variants):
@@ -311,11 +314,11 @@ def fig_h2(model, cfg, table):
     fig, ax = plt.subplots(figsize=(8, 4.5))
     scatter_by_group(ax, table, "E2_kl_pi")
     ax.set_yscale("log")
-    ax.annotate(f"{reference} (reference) is the baseline: KL = 0 by definition", xy=(0.01, 0.02),
+    ax.annotate(f"{reference} (reference) is the baseline: noise = 0 by definition", xy=(0.01, 0.02),
                 xycoords="axes fraction", ha="left", va="bottom", fontsize=8, fontweight="bold", color=INK)
     ax.set_xlabel("bits per weight")
-    ax.set_ylabel(f"E2 mean KL divergence vs {reference}\non the π text (nats)")
-    ax.set_title(f"{model}: logit noise vs bits per weight", loc="left", color=INK)
+    ax.set_ylabel(f"noise on the π text\n(KL divergence from {reference}, log)")
+    ax.set_title(f"{model}: noise vs bits per weight", loc="left", color=INK)
     ax.legend(loc="upper right")
     fig.tight_layout()
     fig.savefig(FIGURES / f"{model}_H2_kl.png")
@@ -327,7 +330,7 @@ def fig_tradeoffs(model, table):
     for r in table:
         r["vram_gib"] = r["vram_mib"] / 1024 if r.get("vram_mib") is not None else None
     panels = [("E1_pi", "E1 correct digits of π (median of 3)", False),
-              ("E2_kl_pi", f"E2 mean KL vs {ref_type(table)} on π (nats, log)", True)]
+              ("E2_kl_pi", f"noise on π (KL from {ref_type(table)}, log)", True)]
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.6))
     for ax, (key, label, log) in zip(axes, panels):
         scatter_by_group(ax, table, key, xkey="vram_gib")
@@ -338,7 +341,7 @@ def fig_tradeoffs(model, table):
         ax.set_ylabel(label)
     ref = next((r for r in table if r["group"] == "reference"), None)
     if ref and ref.get("vram_gib"):
-        axes[1].annotate(f"{ref['variant']} (reference): KL = 0 by definition, {ref['vram_gib']:.1f} GiB",
+        axes[1].annotate(f"{ref['variant']} (reference): noise = 0 by definition, {ref['vram_gib']:.1f} GiB",
                          xy=(0.99, 0.98), xycoords="axes fraction", ha="right", va="top", fontsize=8,
                          fontweight="bold", color=INK)
     axes[0].legend(loc="lower right", fontsize=8)
@@ -379,7 +382,7 @@ def fig_h4(model, table):
     fams = [(f, [v for v in vs if v in by_name]) for f, vs in FAMILIES]
     fams = [(f, vs) for f, vs in fams if vs]
     panels = [("E1_pi", "E1 correct digits of π (median of 3)", False),
-              ("E2_kl_pi", f"E2 mean KL vs {ref_type(table)} on π (nats, log)", True)]
+              ("E2_kl_pi", f"noise on π (KL from {ref_type(table)}, log)", True)]
     fig, axes = plt.subplots(1, 2, figsize=(12, 0.9 + 0.42 * len(fams)), sharey=True)
     seen = set()
     for ax, (key, label, log) in zip(axes, panels):
@@ -406,7 +409,7 @@ def fig_h4(model, table):
         axes[0].axvline(ref["E1_pi"], color=INK, linestyle="--", linewidth=1.2)
         axes[0].annotate(f"{ref_type(table)} reference: {ref['E1_pi']:.0f}", (ref["E1_pi"], 0), textcoords="offset points",
                          xytext=(-4, 0), ha="right", va="center", fontsize=8, fontweight="bold", color=INK)
-    axes[1].annotate(f"{ref_type(table)} reference: KL = 0", xy=(0.02, 0.02), xycoords="axes fraction", fontsize=8,
+    axes[1].annotate(f"{ref_type(table)} reference: noise = 0", xy=(0.02, 0.02), xycoords="axes fraction", fontsize=8,
                      fontweight="bold", color=INK)
     axes[0].set_yticks(range(len(fams)), [f for f, _ in fams])
     axes[0].invert_yaxis()
@@ -459,7 +462,7 @@ def fig_h6(model, rows, table):
     style_ref_ticks(ax, variants, reference)
     ax.axhline(0.5, color=MUTED, linewidth=0.8)
     ax.set_xlabel("E5 sequences (of 8)")
-    ax.set_title(f"{model}: planted error — prompt vs memory", loc="left", color=INK)
+    ax.set_title(f"{model}: planted digit, did it copy the prompt or recite memory?", loc="left", color=INK)
     ax.grid(axis="y", visible=False)
     ax.tick_params(axis="y", labelsize=7)
     fig.legend(*ax.get_legend_handles_labels(), loc="lower center", ncol=3, fontsize=8)
@@ -484,8 +487,8 @@ def fig_h5(models):
         return
     panels = [("E1_pi", "E1 correct digits of π (median of 3)", False, "bpw"),
               ("E1_pi", "E1 correct digits of π (median of 3)", False, "file_gb"),
-              ("E2_kl_pi", "E2 mean KL vs reference on π (nats)", True, "bpw"),
-              ("E2_kl_random", "E2 mean KL vs reference on random digits (nats)", True, "bpw")]
+              ("E2_kl_pi", "noise on π (KL from the reference, log)", True, "bpw"),
+              ("E2_kl_random", "noise on random digits (KL from the reference, log)", True, "bpw")]
     fig, axes = plt.subplots(2, 2, figsize=(12, 9.5))
     axes = axes.ravel()
     for ax, (key, label, log, xkey) in zip(axes, panels):
