@@ -3,7 +3,7 @@
 Kiryl Dubarenka
 
 Phase 1 (4B): [REPORT.md](REPORT.md). Phase 3 (27B): [REPORT_27B.md](REPORT_27B.md). Web
-version: [engineeringthefutureai.github.io/bits-of-pi](https://engineeringthefutureai.github.io/bits-of-pi/)
+version: [bits-of-pi.engineeringthefuture.ai](https://bits-of-pi.engineeringthefuture.ai/)
 
 Does a bigger model tolerate more compression? To find out I ran 19 versions of Qwen 3.5 9B,
 from the uncompressed BF16 original down to 2.9 bits per weight, through the same setup as

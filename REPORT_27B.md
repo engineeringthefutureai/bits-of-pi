@@ -3,7 +3,7 @@
 Kiryl Dubarenka
 
 Phase 1 (4B): [REPORT.md](REPORT.md). Phase 2 (9B): [REPORT_9B.md](REPORT_9B.md). Web version:
-[engineeringthefutureai.github.io/bits-of-pi](https://engineeringthefutureai.github.io/bits-of-pi/)
+[bits-of-pi.engineeringthefuture.ai](https://bits-of-pi.engineeringthefuture.ai/)
 
 The third model is three times the size of the second. I ran 17 versions of Qwen 3.8 27B, from
 Q8_0 down to 2.1 bits per weight, with the same llama.cpp build (`bed0a8566`, SYCL), the same

@@ -2,7 +2,7 @@
 
 *Quantization and digit recall: how many digits of π survive each bit removed.*
 
-**Results: [engineeringthefutureai.github.io/bits-of-pi](https://engineeringthefutureai.github.io/bits-of-pi/)**
+**Results: [bits-of-pi.engineeringthefuture.ai](https://bits-of-pi.engineeringthefuture.ai/)**
 
 How does weight quantization damage exact, low-margin token decisions? This repo measures it
 with digit sequences on Qwen 3.5/3.8 GGUF models (28 variants of the 4B, 19 of the 9B, 17 of the 27B), from BF16 down to

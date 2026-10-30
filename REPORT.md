@@ -2,7 +2,7 @@
 
 Kiryl Dubarenka
 
-Web version: [engineeringthefutureai.github.io/bits-of-pi](https://engineeringthefutureai.github.io/bits-of-pi/)
+Web version: [bits-of-pi.engineeringthefuture.ai](https://bits-of-pi.engineeringthefuture.ai/)
 
 Shrinking a language model's file makes it cheaper to run. What does it cost? Some answers
 from a model hinge on a single token chosen by a hair: the 327th digit of π, say, or one digit
