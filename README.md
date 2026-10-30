@@ -5,7 +5,7 @@
 **Results: [engineeringthefutureai.github.io/bits-of-pi](https://engineeringthefutureai.github.io/bits-of-pi/)**
 
 How does weight quantization damage exact, low-margin token decisions? This repo measures it
-with digit sequences on Qwen 3.5/3.8 GGUF models (28 variants of the 4B, 19 of the 9B), from BF16 down to
+with digit sequences on Qwen 3.5/3.8 GGUF models (28 variants of the 4B, 19 of the 9B, 17 of the 27B), from BF16 down to
 ~2 bits per weight, run through llama.cpp.
 
 Three abilities are tested separately:
@@ -71,7 +71,8 @@ run a second pipeline on the other device and port with a disjoint `--variants` 
 ## Status
 
 Phase 1 (Qwen 3.5 4B): **[REPORT.md](REPORT.md)**. Phase 2 (Qwen 3.5 9B, and the 4B/9B
-comparison): **[REPORT_9B.md](REPORT_9B.md)**. Phase 3 (27B) next.
+comparison): **[REPORT_9B.md](REPORT_9B.md)**. Phase 3 (Qwen 3.8 27B, and the three-size
+comparison): **[REPORT_27B.md](REPORT_27B.md)**.
 
 ## License
 

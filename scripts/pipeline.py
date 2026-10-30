@@ -5,8 +5,12 @@ usage:
   pipeline.py --model qwen3.5-4b --variants BF16,Q8_0
   pipeline.py --model qwen3.5-4b --device level_zero:1 --port 18081 --variants ...   # second GPU
 
-The reference variant runs first and its GGUF is kept (it is the source for every DIY quant and
-the E2 baseline). Every other model file is deleted after its runs, unless --keep.
+The reference variant runs first. By default its GGUF is kept: it is the source for every DIY
+quant and for our imatrix. A model whose reference is not its quantization source (the 27B: a
+Q8_0 reference, quantized from a BF16 that does not fit in VRAM) names the source under
+`quant_source`. Its reference is then deleted after its runs (once our imatrix exists), and the
+source after the last DIY quant. The E2 baseline lives on as raw log-probabilities in
+models/<model>/tf_raw/. Every other model file is deleted after its runs, unless --keep.
 Completed work is skipped, so the pipeline can be stopped and restarted at any point.
 """
 
@@ -24,7 +28,7 @@ import e0
 import run_gen
 import run_tf
 from common import (DATA, GEN_EXPS, INPUTS, MODELS, RUNS, TF, ResourceSampler, backend_env, bin_path,
-                    load_config, model_n_params, read_jsonl)
+                    load_config, model_n_params, read_jsonl, use_mmap)
 
 
 def log(msg):
@@ -50,6 +54,28 @@ def reference_file(cfg, model):
     return MODELS / model / "hf" / ref["file"]
 
 
+def quant_source_file(cfg, model):
+    """The GGUF that DIY quants are made from: `quant_source` (downloaded, possibly split into
+    shards; llama-quantize reads the first) or else the reference."""
+    mcfg = cfg["models"][model]
+    if "quant_source" not in mcfg:
+        return reference_file(cfg, model)
+    return [hf_file(mcfg, model, f) for f in mcfg["quant_source"]][0]
+
+
+def delete_quant_source(cfg, model):
+    """Remove the quantization source once every DIY quant of the model has run."""
+    mcfg = cfg["models"][model]
+    if "quant_source" not in mcfg:
+        return
+    if all(is_done(cfg, model, v) for v in mcfg["variants"] if v["source"] == "quantize"):
+        for f in mcfg["quant_source"]:
+            path = MODELS / model / "hf" / f
+            if path.exists():
+                os.remove(path)
+                log(f"deleted quantization source {path}")
+
+
 def imatrix_file(cfg, model, kind, device):
     mcfg = cfg["models"][model]
     if kind == "unsloth":
@@ -64,7 +90,8 @@ def imatrix_file(cfg, model, kind, device):
         log(f"computing imatrix for {model} from data/calibration.txt")
         subprocess.run([str(bin_path(cfg, "llama-imatrix")), "-m", str(reference_file(cfg, model)),
                         "-f", str(DATA / "calibration.txt"), "-o", str(path),
-                        "--chunks", str(c["chunks"]), "-c", str(c["ctx"]), "-ngl", "999"],
+                        "--chunks", str(c["chunks"]), "-c", str(c["ctx"]), "-ngl", "999"]
+                       + ([] if use_mmap(cfg, reference_file(cfg, model)) else ["--load-mode", "none"]),
                        env=backend_env(cfg, device), check=True,
                        stdout=open(MODELS / model / "imatrix.log", "w"), stderr=subprocess.STDOUT)
     return path
@@ -85,7 +112,7 @@ def ensure_file(cfg, model, v, device):
         out.parent.mkdir(parents=True, exist_ok=True)
         tmp = out.with_suffix(".tmp")
         log(f"[{v['name']}] quantizing {v['type']}")
-        subprocess.run(cmd + [str(reference_file(cfg, model)), str(tmp), v["type"]],
+        subprocess.run(cmd + [str(quant_source_file(cfg, model)), str(tmp), v["type"]],
                        env=backend_env(cfg, device), check=True,
                        stdout=open(out.with_suffix(".log"), "w"), stderr=subprocess.STDOUT)
         tmp.rename(out)
@@ -95,12 +122,26 @@ def ensure_file(cfg, model, v, device):
 def bench(cfg, model_file, out_path, device):
     """llama-bench with the server's arithmetic settings: prompt processing at 512 and 4096 tokens,
     decode of 128 tokens, 3 repetitions each. Server timings on short prompts understate SYCL
-    throughput (fixed per-request overhead), so speed is reported from this instead."""
-    out = subprocess.run([str(bin_path(cfg, "llama-bench")), "-m", str(model_file), "-ngl", "999",
-                          "-p", "512,4096", "-n", "128", "-r", "3", "-b", "2048", "-ub", "512",
-                          "-ctk", "f16", "-ctv", "f16", "-fa", "off", "-o", "json"],
-                         env=backend_env(cfg, device), capture_output=True, text=True, check=True).stdout
-    rows = json.loads(out)
+    throughput (fixed per-request overhead), so speed is reported from this instead.
+
+    Each test runs in its own process: on a multi-GPU split, SYCL aborts while freeing a context
+    (ggml_sycl_pool_host teardown), after the test's row is printed but before the next test runs.
+    A row is kept if it was printed, whatever the exit status."""
+    rows = []
+    for p, n in ((512, 0), (4096, 0), (0, 128)):
+        r = subprocess.run([str(bin_path(cfg, "llama-bench")), "-m", str(model_file), "-ngl", "999",
+                            "-p", str(p), "-n", str(n), "-r", "3", "-b", "2048", "-ub", "512",
+                            "-ctk", "f16", "-ctv", "f16", "-fa", "off", "-o", "json",
+                            "-lm", "auto" if use_mmap(cfg, model_file) else "none"],
+                           env=backend_env(cfg, device), capture_output=True, text=True)
+        out = r.stdout.rstrip()
+        try:
+            got = json.loads(out if out.endswith("]") else out + "]")
+        except json.JSONDecodeError:
+            got = []
+        if len(got) != 1:
+            raise RuntimeError(f"llama-bench p={p} n={n} exit {r.returncode}: {r.stderr[-2000:]}")
+        rows += got
     keep = ("n_prompt", "n_gen", "avg_ts", "stddev_ts", "model_size", "model_n_params", "backends", "gpu_info", "build_commit")
     out_path.write_text(json.dumps([{k: r.get(k) for k in keep} for r in rows], indent=1) + "\n")
     return rows
@@ -183,9 +224,15 @@ def process(cfg, model, v, args):
         log(f"[{name}] bench: " + ", ".join(
             f"{'pp' + str(r['n_prompt']) if r['n_prompt'] else 'tg' + str(r['n_gen'])} {r['avg_ts']:.0f} t/s" for r in rows))
 
-    if name != reference and not args.keep:
+    mcfg = cfg["models"][model]
+    if name == reference and "quant_source" in mcfg:
+        if any(x.get("imatrix") == "own" for x in mcfg["variants"]):
+            imatrix_file(cfg, model, "own", device)
+    if (name != reference or "quant_source" in mcfg) and not args.keep:
         os.remove(path)
         log(f"[{name}] deleted {path}")
+    if v["source"] == "quantize" and not args.keep:
+        delete_quant_source(cfg, model)
 
 
 def main():

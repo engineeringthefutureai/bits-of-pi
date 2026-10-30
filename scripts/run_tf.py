@@ -14,7 +14,7 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from common import INPUTS, MODELS, ROOT, TF, backend_env, load_config, read_jsonl
+from common import INPUTS, MODELS, ROOT, TF, backend_env, load_config, read_jsonl, use_mmap
 
 CHUNK = 64
 
@@ -27,7 +27,8 @@ def dump(cfg, model_file, text, prefix, device=None):
     prefix.parent.mkdir(parents=True, exist_ok=True)
     txt = prefix.with_suffix(".txt")
     txt.write_text(text)
-    subprocess.run([str(ROOT / "tools/bin/tf_dump"), "-m", str(model_file), "-f", str(txt), "-o", str(prefix)],
+    subprocess.run([str(ROOT / "tools/bin/tf_dump"), "-m", str(model_file), "-f", str(txt), "-o", str(prefix)]
+                   + ([] if use_mmap(cfg, model_file) else ["-no-mmap"]),
                    env=backend_env(cfg, device), check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
@@ -98,7 +99,7 @@ def run(cfg, meta, model_file, device=None, log=print):
         if out.exists():
             continue
         prefix = raw_dir(model, variant) / inp["input_id"]
-        if not prefix.with_suffix(".logprobs.f32").exists():
+        if not prefix.with_suffix(".tokens.json").exists():  # written last: a dump cut short has none
             dump(cfg, model_file, inp["header"] + inp["digits"], prefix, device)
         ref_prefix = None if variant == reference else raw_dir(model, reference) / inp["input_id"]
         if ref_prefix is not None and not ref_prefix.with_suffix(".logprobs.f32").exists():

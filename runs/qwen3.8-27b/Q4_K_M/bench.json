@@ -1,0 +1,35 @@
+[
+ {
+  "n_prompt": 512,
+  "n_gen": 0,
+  "avg_ts": 620.161184,
+  "stddev_ts": 0.398274,
+  "model_size": 16799719424,
+  "model_n_params": 27320697856,
+  "backends": "SYCL",
+  "gpu_info": "Intel(R) Arc(TM) Pro B60 Graphics",
+  "build_commit": "bed0a8566"
+ },
+ {
+  "n_prompt": 4096,
+  "n_gen": 0,
+  "avg_ts": 594.423698,
+  "stddev_ts": 0.049772,
+  "model_size": 16799719424,
+  "model_n_params": 27320697856,
+  "backends": "SYCL",
+  "gpu_info": "Intel(R) Arc(TM) Pro B60 Graphics",
+  "build_commit": "bed0a8566"
+ },
+ {
+  "n_prompt": 0,
+  "n_gen": 128,
+  "avg_ts": 21.574772,
+  "stddev_ts": 0.003316,
+  "model_size": 16799719424,
+  "model_n_params": 27320697856,
+  "backends": "SYCL",
+  "gpu_info": "Intel(R) Arc(TM) Pro B60 Graphics",
+  "build_commit": "bed0a8566"
+ }
+]

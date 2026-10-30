@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Qwen 3.5 Digit Recall</title>
-<meta name="description" content="How quantizing Qwen 3.5 4B and 9B affects reciting π, copying digits and choosing prompt over memory, what model size buys, and the VRAM and speed trade-offs.">
+<title>Qwen Digit Recall</title>
+<meta name="description" content="How quantizing Qwen 3.5 4B and 9B and Qwen 3.8 27B affects reciting π, copying digits and choosing prompt over memory, what model size buys, and the VRAM and speed trade-offs.">
 <meta name="author" content="Kiryl Dubarenka">
 <meta property="og:type" content="article">
-<meta property="og:title" content="Qwen 3.5 Digit Recall">
-<meta property="og:description" content="How quantizing Qwen 3.5 4B and 9B affects reciting π, copying digits and choosing prompt over memory, what model size buys, and the VRAM and speed trade-offs.">
+<meta property="og:title" content="Qwen Digit Recall">
+<meta property="og:description" content="How quantizing Qwen 3.5 4B and 9B and Qwen 3.8 27B affects reciting π, copying digits and choosing prompt over memory, what model size buys, and the VRAM and speed trade-offs.">
 <meta property="og:url" content="https://engineeringthefutureai.github.io/bits-of-pi/">
 <meta property="og:image" content="https://engineeringthefutureai.github.io/bits-of-pi/figures/H5_model_size.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -111,64 +111,102 @@ hr { border: 0; border-top: 1px solid var(--rule); margin: 0; }
 
 <main>
   <header style="display:grid; gap:14px;">
-    <div class="eyebrow">Quantization and digit recall · Phases 1–2</div>
-    <h1>Qwen 3.5 Digit Recall</h1>
-    <p class="lede">47 builds of Qwen 3.5 4B and 9B, from BF16 down to 2.9 bits per weight, tested on reciting π from memory, copying digits from the prompt, and choosing between the two.</p>
-    <p class="meta">Kiryl Dubarenka · llama.cpp bed0a8566 · SYCL · Arc Pro B60 · greedy decoding · 5,070 scored requests + 188 teacher-forced passes</p>
+    <div class="eyebrow">Quantization and digit recall · Phases 1–3</div>
+    <h1>Qwen Digit Recall</h1>
+    <p class="lede">64 builds of Qwen 3.5 4B and 9B and Qwen 3.8 27B, from BF16 down to 2.1 bits per weight, tested on reciting π from memory, copying digits from the prompt, and choosing between the two.</p>
+    <p class="meta">Kiryl Dubarenka · llama.cpp bed0a8566 · SYCL · Arc Pro B60 · greedy decoding · 6,600 scored requests + 256 teacher-forced passes</p>
   </header>
 
   <section>
     <h2>Verdicts</h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Hypothesis</th><th>4B</th><th>9B</th><th>Deciding evidence</th></tr></thead>
+        <thead><tr><th>Hypothesis</th><th>4B</th><th>9B</th><th>27B</th><th>Deciding evidence</th></tr></thead>
         <tbody>
-          <tr><td>H1 · Recall holds to ~4 bits, then falls off a cliff</td><td><span class="verdict v-no">Rejected</span></td><td><span class="verdict v-open">Closer</span></td><td>4B π recall declines from 6.6 bits per weight; the 9B holds 1,000+ digits to 5.8 and halves between 5.0 and 4.1</td></tr>
-          <tr><td>H2 · Errors start where margins are thinnest</td><td><span class="verdict v-yes">Confirmed</span></td><td><span class="verdict v-yes">Confirmed</span></td><td>Recall stops sit at the 14th (4B) and 6th (9B) percentile of BF16's margins</td></tr>
-          <tr><td>H3 · Copying is robust; failures are skips in runs</td><td><span class="verdict v-yes">Confirmed</span></td><td><span class="verdict v-yes">Confirmed</span></td><td>Verbatim copy near-perfect to 4.3 bpw (4B) and 3.4 bpw (9B); errors are deletions inside runs, even at BF16</td></tr>
-          <tr><td>H4 · Scheme matters at equal size</td><td><span class="verdict v-yes">Confirmed</span></td><td><span class="verdict v-yes">Confirmed</span></td><td>K beats Q4_0; unsloth's recipe beats stock builds; a digit-free imatrix doesn't protect π</td></tr>
-          <tr><td>H5 · Bigger models hold out to fewer bits</td><td colspan="2"><span class="verdict v-yes">Per bit, not per byte</span></td><td>The 9B's cliff is 1.7 bits lower, but at equal file size the 4B at 8 bits recalls more</td></tr>
-          <tr><td>H6 · Low bits revert to memory over the prompt</td><td><span class="verdict v-no">Reversed</span></td><td><span class="verdict v-open">No conflict</span></td><td>Low-bit 4B builds copy a planted digit <em>more</em> faithfully; the 9B copies it at every working build</td></tr>
+          <tr><td>H1 · Recall holds to ~4 bits, then falls off a cliff</td><td><span class="verdict v-no">Rejected</span></td><td><span class="verdict v-open">Closer</span></td><td><span class="verdict v-no">Rejected</span></td><td>4B π recall declines from 6.6 bits per weight; the 9B holds 1,000+ digits to 5.8 and halves between 5.0 and 4.1; the 27B holds its 1,046 to 5.1 and halves at 4.9</td></tr>
+          <tr><td>H2 · Errors start where margins are thinnest</td><td><span class="verdict v-yes">Confirmed</span></td><td><span class="verdict v-yes">Confirmed</span></td><td>Recall stops sit at the 12th (4B), 6th (9B) and 2nd (27B) percentile of the reference's margins</td></tr>
+          <tr><td>H3 · Copying is robust; failures are skips in runs</td><td><span class="verdict v-yes">Confirmed</span></td><td><span class="verdict v-yes">Confirmed</span></td><td>Verbatim copy near-perfect to 4.3 bpw (4B), 3.4 bpw (9B) and 2.9 bpw (27B, even plain Q2_K); errors are deletions inside runs, even at the reference</td></tr>
+          <tr><td>H4 · Scheme matters at equal size</td><td><span class="verdict v-yes">Confirmed</span></td><td><span class="verdict v-yes">Confirmed</span></td><td>K beats Q4_0; unsloth's recipe beats stock builds (on the 27B from 4 bits down); a digit-free imatrix doesn't protect π</td></tr>
+          <tr><td>H5 · Bigger models hold out to fewer bits</td><td colspan="3"><span class="verdict v-open">Per bit at low bits, never per byte</span></td><td>The 9B's cliff is 1.7 bits below the 4B's; the 27B's sits between them but degrades slowest below 4 bits; per GB the 4B wins</td></tr>
+          <tr><td>H6 · Low bits revert to memory over the prompt</td><td><span class="verdict v-no">Reversed</span></td><td><span class="verdict v-open">No conflict</span></td><td><span class="verdict v-open">No conflict</span></td><td>Low-bit 4B builds copy a planted digit <em>more</em> faithfully; the 9B and 27B copy it at every working build</td></tr>
         </tbody>
       </table>
     </div>
     <div class="takeaways">
-      <div class="takeaway"><b>Q8_0 is free</b><span>Same answers as BF16 on every task at both sizes, 1.7–1.9× faster decode, about half the VRAM.</span></div>
-      <div class="takeaway"><b>Exact recall wants many bits</b><span>4B: stay at Q6_K or above. 9B: Q5_K_M keeps 1,000+ digits of π, and Q4_K_M keeps 700–790.</span></div>
-      <div class="takeaway"><b>Per gigabyte, small and 8-bit wins</b><span>At ~4.5 GB the 4B at Q8_0 recites 1,000 digits; the 9B at Q3_K_M recites 129.</span></div>
-      <div class="takeaway"><b>Copying survives to Q3</b><span>And to Q2_K with an imatrix, at both sizes. Plain Q2_K breaks at both.</span></div>
+      <div class="takeaway"><b>Q8_0 is free</b><span>Same answers as BF16 on every task at 4B and 9B, 1.7–1.9× faster decode, about half the VRAM.</span></div>
+      <div class="takeaway"><b>Exact recall wants many bits</b><span>4B: stay at Q6_K or above. 9B: Q5_K_M keeps 1,000+ digits of π. 27B: Q5_K_M keeps all 1,046 it knows; Q4_K_M keeps 463.</span></div>
+      <div class="takeaway"><b>Per gigabyte, small and 8-bit wins</b><span>At ~4.5 GB the 4B at Q8_0 recites 1,000 digits; the 9B at Q3_K_M recites 129. The 27B needs 19.5 GB for 1,046.</span></div>
+      <div class="takeaway"><b>Copying survives to Q3</b><span>And to Q2_K with an imatrix, at every size. Plain Q2_K breaks the 4B and 9B, not the 27B.</span></div>
       <div class="takeaway"><b>Pick unsloth over stock</b><span>Same type, same size, less noise on π; on the 9B, 10× less generic noise at Q4_K_M.</span></div>
-      <div class="takeaway"><b>Avoid IQ types on SYCL</b><span>IQ3_XXS decodes slower than BF16 on both models.</span></div>
+      <div class="takeaway"><b>Avoid IQ types on SYCL</b><span>IQ3_XXS decodes slower than BF16 on the 4B and 9B; on the 27B, UD files with IQ tensors run at 8–11 tokens/s against 20–22 for plain K-quants.</span></div>
     </div>
   </section>
 
   <section>
     <div class="eyebrow">H5 · model size</div>
-    <h2>The 9B has 1.7 bits more to spare</h2>
-    <p class="prose">The same plain ladder, built the same way, on both models. The cliff is the highest-bit build whose π recall falls below half the reference: <b>Q5_K_M (5.9 bits per weight) on the 4B, Q3_K_M (4.1) on the 9B</b>.</p>
+    <h2>A bigger model helps only at very low bits</h2>
+    <p class="prose">The same plain ladder, built the same way, on three models. The cliff is the highest-bit build whose π recall falls below half the reference: <b>Q5_K_M (5.9 bits per weight) on the 4B, Q3_K_M (4.1) on the 9B and Q4_K_M (4.9) on the 27B</b>. The 27B is also a newer generation (Qwen 3.8), so size is not the only thing that changes.</p>
     <figure>
-      <div class="plate"><img src="figures/H5_model_size.png" alt="Four panels comparing the 4B and 9B: π digits against bits per weight and against file size, and KL on π and on random digits against bits per weight."></div>
-      <figcaption>Blue: 4B. Orange: 9B. Lines join the plain ladder, diamonds are unsloth's files. Top right: the same recall plotted against file size, where the order reverses.</figcaption>
+      <div class="plate"><img src="figures/H5_model_size.png" alt="Four panels comparing the 4B, 9B and 27B: π digits against bits per weight and against file size, and KL on π and on random digits against bits per weight."></div>
+      <figcaption>Blue: 4B. Orange: 9B. Green: 27B. Lines join the plain ladder, diamonds are unsloth's files. Top right: the same recall against file size, where the order reverses. The 27B's KL is measured against its Q8_0.</figcaption>
     </figure>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Plain ladder</th><th class="r">4B π digits</th><th class="r">4B KL on π</th><th class="r">9B π digits</th><th class="r">9B KL on π</th></tr></thead>
+        <thead><tr><th>Plain ladder</th><th class="r">4B π digits</th><th class="r">4B KL on π</th><th class="r">9B π digits</th><th class="r">9B KL on π</th><th class="r">27B π digits</th><th class="r">27B KL on π</th></tr></thead>
         <tbody>
-          <tr class="ref"><td>BF16 (reference)</td><td class="r">1000</td><td class="r">0</td><td class="r">1180</td><td class="r">0</td></tr>
-          <tr><td>Q8_0</td><td class="r">1000</td><td class="r">0.00013</td><td class="r">1200</td><td class="r">0.000007</td></tr>
-          <tr><td>Q6_K</td><td class="r">813</td><td class="r">0.0011</td><td class="r">1056</td><td class="r">0.00010</td></tr>
-          <tr><td>Q5_K_M</td><td class="r"><b>428</b></td><td class="r">0.0075</td><td class="r">1090</td><td class="r">0.00039</td></tr>
-          <tr><td>Q4_K_M</td><td class="r">123</td><td class="r">0.039</td><td class="r">788</td><td class="r">0.0058</td></tr>
-          <tr><td>Q3_K_M</td><td class="r">88</td><td class="r">0.35</td><td class="r"><b>129</b></td><td class="r">0.13</td></tr>
-          <tr><td>Q2_K</td><td class="r">0</td><td class="r">2.30</td><td class="r">0</td><td class="r">2.39</td></tr>
+          <tr class="ref"><td>reference</td><td class="r">1000</td><td class="r">0</td><td class="r">1180</td><td class="r">0</td><td class="r">1046</td><td class="r">0</td></tr>
+          <tr><td>Q8_0</td><td class="r">1000</td><td class="r">0.00013</td><td class="r">1200</td><td class="r">0.000007</td><td class="r">(reference)</td><td class="r"></td></tr>
+          <tr><td>Q6_K</td><td class="r">813</td><td class="r">0.0011</td><td class="r">1056</td><td class="r">0.00010</td><td class="r">1046</td><td class="r">0.00026</td></tr>
+          <tr><td>Q5_K_M</td><td class="r"><b>428</b></td><td class="r">0.0075</td><td class="r">1090</td><td class="r">0.00039</td><td class="r">1046</td><td class="r">0.00014</td></tr>
+          <tr><td>Q4_K_M</td><td class="r">123</td><td class="r">0.039</td><td class="r">788</td><td class="r">0.0058</td><td class="r"><b>463</b></td><td class="r">0.0070</td></tr>
+          <tr><td>Q3_K_M</td><td class="r">88</td><td class="r">0.35</td><td class="r"><b>129</b></td><td class="r">0.13</td><td class="r">271</td><td class="r">0.037</td></tr>
+          <tr><td>Q2_K</td><td class="r">0</td><td class="r">2.30</td><td class="r">0</td><td class="r">2.39</td><td class="r">58</td><td class="r">0.60</td></tr>
         </tbody>
       </table>
     </div>
     <ul class="prose">
-      <li><b>The lead shrinks as bits drop.</b> At 8–6 bits the 9B has 10–19× less noise on π. Its noise then grows faster (12× per bit against 7.6×), and both reach the same level at Q2_K. Across unsloth's files the gap goes from 15–19× at Q8_0–Q5_K_M to 1.2–1.5× at the 2–3 bit files.</li>
-      <li><b>Per byte, the comparison reverses.</b> At about 4.5 GB, the 4B at Q8_0 recites 1,000 digits and the 9B at Q3_K_M recites 129. The 9B matches the 4B only from 6.5 GB (Q5_K_M). Exact recall needs many bits per weight more than it needs many weights.</li>
-      <li>The 9B's BF16 recites π past the 1,200-digit generation cap, so its reference is a lower bound. Q8_0 reaches the cap too.</li>
+      <li><b>At 5–6 bits the 27B is no quieter than the 9B.</b> Both sit at 0.0001–0.0004 nats on π, well below the 4B (0.001–0.008).</li>
+      <li><b>From 4 bits down the 27B pulls ahead.</b> At Q3_K_M its π noise is 3.5× below the 9B's, and at Q2_K 4× below both smaller models, which meet there. Its π recall at Q3_K_M (271) and Q2_K (58) is the best of the three.</li>
+      <li><b>The cliff follows the thin digits.</b> The 27B's Q4_K_M has the 9B's noise level but first breaks at digit 463, where its reference is only 2.9 nats sure. The 27B has 6 digits under 3 nats, the 9B 2.</li>
+      <li><b>Per byte, the order reverses.</b> The 4B at Q8_0 recites 1,000 digits from 4.5 GB, the 9B at Q6_K 1,056 from 7.4 GB, and the 27B needs 19.5 GB for 1,046. Exact recall needs many bits per weight more than it needs many weights.</li>
     </ul>
+  </section>
+
+  <section>
+    <div class="eyebrow">Phase 3 · Qwen 3.8 27B</div>
+    <h2>The 27B: knows less π, holds it longer</h2>
+    <p class="prose">17 builds: unsloth's Q8_0 as the reference (BF16 does not fit in two 24 GB cards), 10 more unsloth files, our plain ladder from Q6_K to Q2_K, and Q2_K with our imatrix. The three largest files run split over both cards.</p>
+    <figure>
+      <div class="plate"><img src="figures/qwen3.8-27b_H1_recall.png" alt="Correct digits of π against bits per weight for the 17 27B variants."></div>
+      <figcaption>27B: digits of π recited before the first error, median of 3 phrasings (whiskers min–max). The dashed line is the Q8_0 reference's 1,046.</figcaption>
+    </figure>
+    <ul class="prose">
+      <li><b>A memory limit, not a quantization one.</b> Q8_0 stops at π digit 1,046 in two phrasings: after <code>…2796823030</code> it writes <code>8979…</code> where π continues <code>1952…</code>. Every build down to 5.1 bits stops at the same digit. The 9B gets past it, so the bigger, newer model has memorized less π.</li>
+      <li><b>Margins predict the steps.</b> π recall moves in steps (990, 463, 437, 271, 167, 163), and each is the first digit that build gets wrong under teacher forcing. The median free-recall stop lies at the 2nd percentile of Q8_0's margins.</li>
+      <li><b>Recipe matters below 5 bits.</b> unsloth's UD-Q4_K_M has half our Q4_K_M's π noise and recites 990 digits against 463. At 5–6 bits the builds are level.</li>
+      <li><b>Copying is the strongest yet.</b> Plain Q2_K copies 17,000 digits without an error. Only UD-IQ2_XXS (2.1 bits) drops digits. Every build copies all 8 planted digits.</li>
+      <li><b>Recall as words works.</b> Asked for π in English words, Q8_0 is correct for 46 digits ("one four one five nine…"). The smaller models produced fragments.</li>
+    </ul>
+    <figure>
+      <div class="plate"><img src="figures/qwen3.8-27b_H2_margins.png" alt="27B Q8_0 margin along the 1000 digits of π, and for each variant the positions where its teacher-forced top-1 digit is wrong."></div>
+      <figcaption>27B, top: Q8_0 margin along π. Bottom: a dot wherever a variant's top-1 digit is wrong under teacher forcing. Builds down to 5.1 bits make no errors.</figcaption>
+    </figure>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>27B variant</th><th class="r">GPUs</th><th class="r">File GB</th><th class="r">VRAM GiB</th><th class="r">Decode tok/s</th><th class="r">Prompt tok/s</th><th class="r">π digits</th></tr></thead>
+        <tbody>
+          <tr class="ref"><td>unsloth Q8_0 (reference)</td><td class="r">2</td><td class="r">29.05</td><td class="r">27.7</td><td class="r">13</td><td class="r">1,093</td><td class="r">1046</td></tr>
+          <tr><td>Q6_K</td><td class="r">2</td><td class="r">22.43</td><td class="r">21.9</td><td class="r">17</td><td class="r">1,098</td><td class="r">1046</td></tr>
+          <tr><td>Q5_K_M</td><td class="r">1</td><td class="r">19.54</td><td class="r">18.5</td><td class="r">18</td><td class="r">687</td><td class="r">1046</td></tr>
+          <tr><td>unsloth UD-Q4_K_M</td><td class="r">1</td><td class="r">16.46</td><td class="r">15.7</td><td class="r">15</td><td class="r">502</td><td class="r">990</td></tr>
+          <tr><td>Q4_K_M</td><td class="r">1</td><td class="r">16.81</td><td class="r">16.1</td><td class="r">22</td><td class="r">594</td><td class="r">463</td></tr>
+          <tr><td>Q3_K_M</td><td class="r">1</td><td class="r">13.50</td><td class="r">13.2</td><td class="r">20</td><td class="r">459</td><td class="r">271</td></tr>
+          <tr><td>unsloth UD-IQ3_XXS</td><td class="r">1</td><td class="r">10.93</td><td class="r">10.8</td><td class="r">8</td><td class="r">327</td><td class="r">167</td></tr>
+          <tr><td>Q2_K</td><td class="r">1</td><td class="r">10.86</td><td class="r">11.0</td><td class="r">22</td><td class="r">539</td><td class="r">58</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">Split builds report VRAM and power summed over both cards; a split does not speed up decode. One card holds Q5_K_M and below with an 8k context. The 27B was loaded without memory-mapping: mapping a 22–29 GB file on a 30 GB host ran the machine out of RAM. The full 27B write-up is in <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/REPORT_27B.md">REPORT_27B.md</a>.</p>
   </section>
 
   <section>
@@ -417,7 +455,7 @@ hr { border: 0; border-top: 1px solid var(--rule); margin: 0; }
     </ul>
   </section>
   <footer>
-    <p>Source, data and full method: <a href="https://github.com/engineeringthefutureai/bits-of-pi">github.com/engineeringthefutureai/bits-of-pi</a> · <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/REPORT.md">REPORT.md</a> · <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/REPORT_9B.md">REPORT_9B.md</a> · <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/PLAN.md">PLAN.md</a></p>
+    <p>Source, data and full method: <a href="https://github.com/engineeringthefutureai/bits-of-pi">github.com/engineeringthefutureai/bits-of-pi</a> · <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/REPORT.md">REPORT.md</a> · <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/REPORT_9B.md">REPORT_9B.md</a> · <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/REPORT_27B.md">REPORT_27B.md</a> · <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/PLAN.md">PLAN.md</a></p>
     <p>Code under the MIT License.</p>
   </footer>
 </main>

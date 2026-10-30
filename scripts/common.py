@@ -62,6 +62,13 @@ def bin_path(cfg, name):
     return build_dir(cfg) / "bin" / name
 
 
+def use_mmap(cfg, model_file):
+    """Whether llama.cpp may mmap this file: the models' `mmap` setting (default true), found from
+    the file's place under models/<model>/."""
+    model = Path(model_file).resolve().relative_to(MODELS.resolve()).parts[0]
+    return cfg["models"].get(model, {}).get("mmap", True)
+
+
 def backend_env(cfg, device=None):
     """Environment for running llama.cpp binaries: oneAPI vars for SYCL, plus the device pin."""
     env = dict(os.environ)
@@ -97,6 +104,8 @@ class Server:
         self.url = f"http://127.0.0.1:{self.port}"
         self.cmd = [str(bin_path(cfg, "llama-server")), "-m", str(model_file),
                     "--port", str(self.port), *cfg["server"]["args"]]
+        if not use_mmap(cfg, model_file):
+            self.cmd += ["--load-mode", "none"]
         self.env = backend_env(cfg, device)
         self.log_path = log_path
         self.proc = None
@@ -176,31 +185,44 @@ def read_peak_rss_mib(pid):
 class ResourceSampler:
     """Samples GPU memory, memory-bandwidth utilization and power once a second with xpu-smi.
 
-    The device index is the N in level_zero:N; both enumerate the B60s in PCI order.
+    The device index is the N in level_zero:N; both enumerate the B60s in PCI order. A model split
+    over several GPUs (level_zero:0,1) gets one xpu-smi per device and one CSV each
+    (<name>.gpuN.csv); the summary adds memory and power across devices.
     """
 
     def __init__(self, device, csv_path):
-        self.index = device.split(":")[-1]
-        self.csv_path = csv_path
-        self.proc = None
+        self.indices = device.split(":")[-1].split(",")
+        if len(self.indices) == 1:
+            self.csv_paths = [csv_path]
+        else:
+            self.csv_paths = [csv_path.with_name(f"{csv_path.stem}.gpu{i}.csv") for i in self.indices]
+        self.procs = []
 
     def baseline_mib(self):
-        rows = self._parse(subprocess.run(
-            ["xpu-smi", "dump", "--device", self.index, "--metrics", "m", "--interval", "1", "--number", "1"],
-            capture_output=True, text=True).stdout)
-        return rows[0].get("memory.used (MiB)") if rows else None
+        total = 0
+        for i in self.indices:
+            rows = self._parse(subprocess.run(
+                ["xpu-smi", "dump", "--device", i, "--metrics", "m", "--interval", "1", "--number", "1"],
+                capture_output=True, text=True).stdout)
+            if not rows or rows[0].get("memory.used (MiB)") is None:
+                return None
+            total += rows[0]["memory.used (MiB)"]
+        return total
 
     def __enter__(self):
         self.baseline = self.baseline_mib()
-        self.proc = subprocess.Popen(
-            ["xpu-smi", "dump", "--device", self.index, "--metrics", "u,m,p", "--interval", "1"],
-            stdout=open(self.csv_path, "w"), stderr=subprocess.DEVNULL)
+        for i, path in zip(self.indices, self.csv_paths):
+            self.procs.append(subprocess.Popen(
+                ["xpu-smi", "dump", "--device", i, "--metrics", "u,m,p", "--interval", "1"],
+                stdout=open(path, "w"), stderr=subprocess.DEVNULL))
         return self
 
     def __exit__(self, *exc):
-        self.proc.terminate()
-        self.proc.wait()
-        drop_timestamp_column(self.csv_path)
+        for proc in self.procs:
+            proc.terminate()
+            proc.wait()
+        for path in self.csv_paths:
+            drop_timestamp_column(path)
 
     @staticmethod
     def _parse(text):
@@ -221,12 +243,20 @@ class ResourceSampler:
         return rows
 
     def summary(self):
-        rows = self._parse(open(self.csv_path).read())
-        def col(name):
-            return [r[name] for r in rows if r.get(name) is not None]
-        used, power, bw = col("memory.used (MiB)"), col("power.draw (W)"), col("utilization.memory (%)")
+        per_dev = [self._parse(open(p).read()) for p in self.csv_paths]
+        n = min(len(rows) for rows in per_dev)
+        def col(name, combine):
+            out = []
+            for k in range(n):
+                vals = [rows[k].get(name) for rows in per_dev]
+                if all(v is not None for v in vals):
+                    out.append(combine(vals))
+            return out
+        used = col("memory.used (MiB)", sum)
+        power = col("power.draw (W)", sum)
+        bw = col("utilization.memory (%)", statistics.mean)
         return {
-            "samples": len(rows),
+            "samples": n,
             "vram_baseline_mib": self.baseline,
             "vram_peak_mib": max(used) if used else None,
             "vram_delta_mib": (max(used) - self.baseline) if used and self.baseline is not None else None,

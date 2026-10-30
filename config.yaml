@@ -117,4 +117,37 @@ models:
       - {name: us_UD-IQ3_XXS,  group: unsloth, source: hf, file: Qwen3.5-9B-UD-IQ3_XXS.gguf}
       - {name: us_UD-IQ2_XXS,  group: unsloth, source: hf, file: Qwen3.5-9B-UD-IQ2_XXS.gguf}
 
-  # Phase 3 (27B) is added after the 9B review.
+  qwen3.8-27b:
+    hf_repo: unsloth/Qwen3.8-27B-GGUF
+    # BF16 (54.7 GB) does not fit in 2 x 24 GB, so unsloth's Q8_0 is the reference and spans
+    # both GPUs; DIY quants are made from the BF16, which is deleted after the last of them
+    reference: us_Q8_0
+    quant_source: [BF16/Qwen3.8-27B-BF16-00001-of-00002.gguf, BF16/Qwen3.8-27B-BF16-00002-of-00002.gguf]
+    skip_exps: [E4]                 # superseded by E4b (see PLAN.md)
+    e0_variants: [us_Q8_0, Q6_K]
+    # a 22-29 GB file mmapped on a 30 GB host starves the page cache and triggers the OOM killer;
+    # without mmap the weights are read straight into VRAM (same numbers, smaller host RSS)
+    mmap: false
+    variants:
+      - {name: us_Q8_0,        group: reference, source: hf, file: Qwen3.8-27B-Q8_0.gguf}
+
+      # DIY ladder, no imatrix (H1, H5); Q6_K also spans both GPUs
+      - {name: Q6_K,           group: ladder,  source: quantize, type: Q6_K}
+      - {name: Q5_K_M,         group: ladder,  source: quantize, type: Q5_K_M}
+      - {name: Q4_K_M,         group: ladder,  source: quantize, type: Q4_K_M}
+      - {name: Q3_K_M,         group: ladder,  source: quantize, type: Q3_K_M}
+      - {name: Q2_K,           group: ladder,  source: quantize, type: Q2_K}
+      # imatrix computed from the Q8_0 reference (BF16 does not fit in VRAM)
+      - {name: Q2_K_imat,      group: imatrix, source: quantize, type: Q2_K,    imatrix: own}
+
+      # unsloth prequantized; for the 27B every K-quant file is an unsloth dynamic (UD) mix
+      - {name: us_UD-Q6_K,     group: unsloth, source: hf, file: Qwen3.8-27B-UD-Q6_K.gguf}
+      - {name: us_UD-Q5_K_M,   group: unsloth, source: hf, file: Qwen3.8-27B-UD-Q5_K_M.gguf}
+      - {name: us_UD-Q4_K_XL,  group: unsloth, source: hf, file: Qwen3.8-27B-UD-Q4_K_XL.gguf}
+      - {name: us_UD-Q4_K_M,   group: unsloth, source: hf, file: Qwen3.8-27B-UD-Q4_K_M.gguf}
+      - {name: us_Q4_0,        group: unsloth, source: hf, file: Qwen3.8-27B-Q4_0.gguf}
+      - {name: us_UD-IQ4_XS,   group: unsloth, source: hf, file: Qwen3.8-27B-UD-IQ4_XS.gguf}
+      - {name: us_UD-Q3_K_XL,  group: unsloth, source: hf, file: Qwen3.8-27B-UD-Q3_K_XL.gguf}
+      - {name: us_UD-IQ3_XXS,  group: unsloth, source: hf, file: Qwen3.8-27B-UD-IQ3_XXS.gguf}
+      - {name: us_UD-Q2_K_XL,  group: unsloth, source: hf, file: Qwen3.8-27B-UD-Q2_K_XL.gguf}
+      - {name: us_UD-IQ2_XXS,  group: unsloth, source: hf, file: Qwen3.8-27B-UD-IQ2_XXS.gguf}

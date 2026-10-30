@@ -3,7 +3,7 @@
 // Built against the same llama.cpp commit and backend as llama-server, so E2 numbers
 // come from the same arithmetic as the generation runs.
 //
-// usage: tf_dump -m model.gguf -f text.txt -o out_prefix [-ngl 999] [-b 2048] [-ub 512]
+// usage: tf_dump -m model.gguf -f text.txt -o out_prefix [-ngl 999] [-b 2048] [-ub 512] [-no-mmap]
 //
 // writes:
 //   <out_prefix>.tokens.json   {"n_vocab": V, "tokens": [...], "pieces": [...]}
@@ -44,6 +44,7 @@ static std::string json_escape(const std::string & s) {
 int main(int argc, char ** argv) {
     std::string model_path, text_path, out_prefix;
     int ngl = 999, n_batch = 2048, n_ubatch = 512;
+    bool mmap = true;
 
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
@@ -57,10 +58,11 @@ int main(int argc, char ** argv) {
         else if (a == "-ngl") ngl        = std::stoi(next());
         else if (a == "-b")   n_batch    = std::stoi(next());
         else if (a == "-ub")  n_ubatch   = std::stoi(next());
+        else if (a == "-no-mmap") mmap = false;
         else { fprintf(stderr, "unknown argument: %s\n", a.c_str()); return 1; }
     }
     if (model_path.empty() || text_path.empty() || out_prefix.empty()) {
-        fprintf(stderr, "usage: %s -m model.gguf -f text.txt -o out_prefix [-ngl N] [-b N] [-ub N]\n", argv[0]);
+        fprintf(stderr, "usage: %s -m model.gguf -f text.txt -o out_prefix [-ngl N] [-b N] [-ub N] [-no-mmap]\n", argv[0]);
         return 1;
     }
 
@@ -73,6 +75,7 @@ int main(int argc, char ** argv) {
 
     llama_model_params mparams = llama_model_default_params();
     mparams.n_gpu_layers = ngl;
+    if (!mmap) mparams.load_mode = LLAMA_LOAD_MODE_NONE;
     llama_model * model = llama_model_load_from_file(model_path.c_str(), mparams);
     if (!model) { fprintf(stderr, "failed to load model\n"); return 1; }
 

@@ -25,7 +25,7 @@ GROUP_STYLE = {
     "unsloth":   {"color": "#1baf7a", "marker": "D", "label": "unsloth"},
     "usimat":    {"color": "#52514e", "marker": "^", "label": "DIY + unsloth imatrix"},
     "scheme":    {"color": "#52514e", "marker": "v", "label": "Q4_0 (legacy)"},
-    "reference": {"color": "#0b0b0b", "marker": "*", "label": "reference (BF16)"},
+    "reference": {"color": "#0b0b0b", "marker": "*", "label": "reference"},
 }
 
 # H4: every build of the same quant type, side by side. Rows run from most to fewest bits.
@@ -176,6 +176,8 @@ def headline(model, cfg, rows, meta):
             "tg_in_test_tok_s": tg_in_test(model, v),
             "tg128_tok_s": b.get("tg128"), "pp512_tok_s": b.get("pp512"), "pp4096_tok_s": b.get("pp4096"),
             "power_w": res.get("power_mean_w"),
+            # the 27B's largest files are split over both GPUs: their speed is not one-card speed
+            "n_gpus": len(res["device"].split(":")[1].split(",")) if res.get("device") else None,
         })
         table.append(row)
 
@@ -219,6 +221,12 @@ def annotate_ref(ax, table, key, xkey="bpw"):
                     xytext=(-8, 8), ha="right", fontsize=8, fontweight="bold", color=INK)
 
 
+def ref_type(table):
+    """Quant type of the reference, for labels: BF16 for the 4B/9B, Q8_0 for the 27B."""
+    ref = next((r for r in table if r["group"] == "reference"), None)
+    return ref["variant"].removeprefix("us_") if ref else "reference"
+
+
 def scatter_by_group(ax, table, key, label_points=False, err=None, xkey="bpw"):
     """Markers per group; only the DIY ladder is joined by a line (one recipe, varying bits).
     Other groups mix types (K, IQ, UD) so a line between them would imply a trend that isn't there."""
@@ -230,7 +238,8 @@ def scatter_by_group(ax, table, key, label_points=False, err=None, xkey="bpw"):
         x = [r[xkey] for r in pts]
         y = [r[key] for r in pts]
         kw = dict(color=style["color"], marker=style["marker"], markersize=13 if g == "reference" else 7,
-                  label=style["label"], markeredgecolor="white", markeredgewidth=1)
+                  label=f"reference ({ref_type(table)})" if g == "reference" else style["label"],
+                  markeredgecolor="white", markeredgewidth=1)
         if err:
             lo = [r[key] - r[err[0]] for r in pts]
             hi = [r[err[1]] - r[key] for r in pts]
@@ -251,7 +260,7 @@ def fig_h1(model, table):
                      label_points=True, err=("E1_pi_min", "E1_pi_max"))
     if ref and ref["E1_pi"] is not None:
         ax.axhline(ref["E1_pi"], color=INK, linestyle="--", linewidth=1.2)
-        ax.annotate(f"BF16 reference ({ref['bpw']:.0f} bpw): {ref['E1_pi']:.0f} digits",
+        ax.annotate(f"{ref_type(table)} reference ({ref['bpw']:.1f} bpw): {ref['E1_pi']:.0f} digits",
                     (ax.get_xlim()[0], ref["E1_pi"]), textcoords="offset points", xytext=(4, -13),
                     fontsize=9, fontweight="bold", color=INK)
     ax.set_xlabel("bits per weight (file size × 8 / parameters)")
@@ -274,11 +283,13 @@ def fig_h2(model, cfg, table):
     m = ref["margin"].to_numpy()
     a1.plot(ref["pos"], m, color=GRID, linewidth=0.8)
     k = 25
-    a1.plot(ref["pos"], np.convolve(m, np.ones(k) / k, mode="same"), color=GROUP_STYLE["ladder"]["color"],
+    # divide by the window actually covered, so the ends are not dragged toward zero by padding
+    smooth = np.convolve(m, np.ones(k), mode="same") / np.convolve(np.ones_like(m), np.ones(k), mode="same")
+    a1.plot(ref["pos"], smooth, color=GROUP_STYLE["ladder"]["color"],
             label=f"{reference} (reference) margin, {k}-digit moving average")
     a1.axhline(0, color=MUTED, linewidth=0.8)
     a1.set_ylabel("margin (nats)")
-    a1.set_title(f"{model}: π teacher-forced margin, and where each variant's top-1 is not the true digit",
+    a1.set_title(f"{model}: π margin under teacher forcing, and each variant's wrong digits",
                  loc="left", color=INK)
     a1.legend(loc="upper right")
     for i, v in enumerate(variants):
@@ -316,7 +327,7 @@ def fig_tradeoffs(model, table):
     for r in table:
         r["vram_gib"] = r["vram_mib"] / 1024 if r.get("vram_mib") is not None else None
     panels = [("E1_pi", "E1 correct digits of π (median of 3)", False),
-              ("E2_kl_pi", "E2 mean KL vs BF16 on π (nats, log)", True)]
+              ("E2_kl_pi", f"E2 mean KL vs {ref_type(table)} on π (nats, log)", True)]
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.6))
     for ax, (key, label, log) in zip(axes, panels):
         scatter_by_group(ax, table, key, xkey="vram_gib")
@@ -345,11 +356,18 @@ def fig_speed(model, table):
     for ax, (key, label) in zip(axes, panels):
         scatter_by_group(ax, table, key, label_points=True)
         annotate_ref(ax, table, key)
+        for r in table:
+            if (r.get("n_gpus") or 1) > 1 and r.get(key) is not None:
+                ax.annotate("2 GPUs", (r["bpw"], r[key]), textcoords="offset points", xytext=(4, -11),
+                            fontsize=7, color=MUTED)
         ax.set_xlabel("bits per weight")
         ax.set_ylabel(label)
         ax.set_ylim(bottom=0)
     axes[0].legend(loc="upper right", fontsize=8)
-    fig.suptitle(f"{model}: speed on one Arc Pro B60 (SYCL)", x=0.01, ha="left", color=INK)
+    split = any((r.get("n_gpus") or 1) > 1 for r in table)
+    fig.suptitle(f"{model}: speed on one Arc Pro B60 (SYCL)"
+                 + ("; points marked “2 GPUs” are split over both cards" if split else ""),
+                 x=0.01, ha="left", color=INK)
     fig.tight_layout()
     fig.savefig(FIGURES / f"{model}_speed.png")
     plt.close(fig)
@@ -361,7 +379,7 @@ def fig_h4(model, table):
     fams = [(f, [v for v in vs if v in by_name]) for f, vs in FAMILIES]
     fams = [(f, vs) for f, vs in fams if vs]
     panels = [("E1_pi", "E1 correct digits of π (median of 3)", False),
-              ("E2_kl_pi", "E2 mean KL vs BF16 on π (nats, log)", True)]
+              ("E2_kl_pi", f"E2 mean KL vs {ref_type(table)} on π (nats, log)", True)]
     fig, axes = plt.subplots(1, 2, figsize=(12, 0.9 + 0.42 * len(fams)), sharey=True)
     seen = set()
     for ax, (key, label, log) in zip(axes, panels):
@@ -386,9 +404,9 @@ def fig_h4(model, table):
     ref = next((r for r in table if r["group"] == "reference"), None)
     if ref and ref["E1_pi"] is not None:
         axes[0].axvline(ref["E1_pi"], color=INK, linestyle="--", linewidth=1.2)
-        axes[0].annotate(f"BF16 reference: {ref['E1_pi']:.0f}", (ref["E1_pi"], 0), textcoords="offset points",
+        axes[0].annotate(f"{ref_type(table)} reference: {ref['E1_pi']:.0f}", (ref["E1_pi"], 0), textcoords="offset points",
                          xytext=(-4, 0), ha="right", va="center", fontsize=8, fontweight="bold", color=INK)
-    axes[1].annotate("BF16 reference: KL = 0", xy=(0.02, 0.02), xycoords="axes fraction", fontsize=8,
+    axes[1].annotate(f"{ref_type(table)} reference: KL = 0", xy=(0.02, 0.02), xycoords="axes fraction", fontsize=8,
                      fontweight="bold", color=INK)
     axes[0].set_yticks(range(len(fams)), [f for f, _ in fams])
     axes[0].invert_yaxis()
@@ -482,7 +500,7 @@ def fig_h5(models):
             ref = next((r for r in table if r["group"] == "reference"), None)
             if not log and ref and isinstance(ref.get(key), float):
                 ax.axhline(ref[key], color=color, linestyle="--", linewidth=1,
-                           label=f"{m} {ref['variant']} (reference)")
+                           label=f"{m} {ref['variant'].removeprefix('us_')} (reference)")
         if log:
             ax.set_yscale("log")
         else:
@@ -491,10 +509,10 @@ def fig_h5(models):
             ax.set_xlim(2.5, 9)
             ax.set_xlabel("bits per weight")
         else:
-            ax.set_xlim(0, 10)
+            ax.set_xlim(0, max(r["file_gb"] for tb in tables.values() for r in tb) * 1.05)
             ax.set_xlabel("file size (GB): equal memory, different model sizes")
         ax.set_ylabel(label)
-    axes[0].set_title("same quant types, two model sizes", loc="left", color=INK)
+    axes[0].set_title(f"same quant types, {len(tables)} model sizes", loc="left", color=INK)
     axes[1].set_title("π recall by file size", loc="left", color=INK)
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", ncol=4, fontsize=8, frameon=False)

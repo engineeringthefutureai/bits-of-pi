@@ -147,7 +147,15 @@ Each hypothesis ends as **confirmed / rejected / unclear** with the figure that 
   plain no-imatrix ladder (Q6_K, Q5_K_M, Q4_K_M, Q3_K_M, Q2_K) and Q2_K with our imatrix. The
   plain ladder gives H5 a like-for-like comparison across sizes; the imatrix/recipe breakdown
   (H4) was answered on the 4B and is not repeated. The original E4 is skipped (E4b replaces it).
-- **Phase 3, 27B:** Q8_0-from-FP8 reference, reduced set.
+- **Phase 3, 27B (Qwen 3.8 27B):** 17 variants. BF16 (54.7 GB) does not fit in 2 × 24 GB, so
+  unsloth's Q8_0 (made from the BF16 release, not the FP8 one) is the reference and runs split
+  over both GPUs, as do Q6_K and UD-Q6_K. The plain ladder (Q6_K to Q2_K) is quantized from
+  unsloth's BF16, as on the smaller models; Q2_K_imat uses an imatrix computed from the Q8_0
+  reference. unsloth's 27B K-quant files are all dynamic (UD) mixes: UD-Q6_K, UD-Q5_K_M,
+  UD-Q4_K_XL, UD-Q4_K_M, Q4_0, UD-IQ4_XS, UD-Q3_K_XL, UD-IQ3_XXS, UD-Q2_K_XL, UD-IQ2_XXS.
+  E4 is skipped. Speed for split variants is two-GPU speed and is not comparable to single-GPU
+  numbers. The 27B loads without mmap (`mmap: false` in `config.yaml`): a 22–29 GB mapped file
+  on a 30 GB host triggered the OOM killer. Done: [REPORT_27B.md](REPORT_27B.md).
 - **Phase 4:** cross-model figures and the hypothesis report.
 
 ## Decisions and deviations
@@ -160,5 +168,5 @@ Each hypothesis ends as **confirmed / rejected / unclear** with the figure that 
 | E2 tool | `llama-cpp-python` | `tools/tf_dump.cpp` linked to the same build | Same commit and backend as the server by construction; no Python-binding version drift |
 | E6 | — | added | Completes the memory × context × digits/words grid. Possibly at floor for the 4B (unsloth Q4_K_M counts 0–9 instead of reciting); kept if BF16 does better, else reported as floor |
 | Calibration | open question | wikitext-2 train, lines with any 3+ digit run or decimal number dropped, first 600k chars | Widely used for imatrix; digit-free by construction; SHA-256 in `data/calibration.sha256` |
-| 28B | Qwen 3.8 28B | Qwen3.8-27B, FP8 weights | That is the model available; reference is Q8_0 made from FP8 (a BF16 copy holds no more information than the FP8 source) |
+| 28B | Qwen 3.8 28B | Qwen3.8-27B; reference is unsloth's Q8_0 | That is the model available. BF16 does not fit in 2 × 24 GB; the FP8 release was not used, so every 27B file comes from the same BF16 GGUF lineage |
 | Flash attention | "identical across variants" | pinned `off` | `auto` could differ by quant type |

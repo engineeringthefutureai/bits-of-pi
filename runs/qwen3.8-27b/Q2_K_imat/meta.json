@@ -1,0 +1,15 @@
+{
+ "model": "qwen3.8-27b",
+ "variant": "Q2_K_imat",
+ "group": "imatrix",
+ "source": "quantize",
+ "file_size": 10864593952,
+ "n_params": 27320697856,
+ "bpw": 3.181,
+ "sha256": "55fb5cf15fae7d3cf7d4d1d8dbfd94395512202b9309cd938c0297907a059843",
+ "llama_cpp_commit": "bed0a856606ee4a24a164066f73d2379447033f5",
+ "backend": "sycl",
+ "quant_type": "Q2_K",
+ "imatrix": "own",
+ "imatrix_sha256": "005f6ef088e04a6136e0ebb5bc73512f939cff8201de8c728f4348f292799a75"
+}
