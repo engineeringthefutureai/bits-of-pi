@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raw Data</title>
+<meta name="description" content="Every number behind Qwen Digit Recall: all 64 model versions as a sortable table, every scored test answer, and how sure each version was of each of the first 1,000 digits of π.">
+<meta name="author" content="Kiryl Dubarenka">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Raw Data">
+<meta property="og:description" content="Every number behind Qwen Digit Recall: all 64 model versions as a sortable table, every scored test answer, and how sure each version was of each of the first 1,000 digits of π.">
+<meta property="og:url" content="https://bits-of-pi.engineeringthefuture.ai/data.html">
+<meta property="og:image" content="https://bits-of-pi.engineeringthefuture.ai/figures/H5_model_size.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232a78d6'/%3E%3Ctext x='32' y='46' font-family='Georgia,serif' font-size='44' text-anchor='middle' fill='white'%3E%CF%80%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<main class="wide">
+  <nav class="site-nav" aria-label="Pages"><a href="./">Results</a><a href="method.html">How the experiments work</a><a href="guide.html">How the model files were made</a><a href="data.html" aria-current="page">Raw data</a></nav>
+  <header style="display:grid; gap:14px;">
+    <div class="eyebrow">Qwen Digit Recall · raw data</div>
+    <h1>Raw data</h1>
+    <p class="lede">Every number behind the figures, to check or explore on your own. The table of versions has one row per model file. The test answers view lists each scored answer separately. The per-digit view shows how sure each version was of each of the first 1,000 digits of π.</p>
+  </header>
+
+  <section>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-versions" aria-controls="view-versions">Versions</button>
+      <button role="tab" id="tab-answers" aria-controls="view-answers">Test answers</button>
+      <button role="tab" id="tab-digits" aria-controls="view-digits">Per digit of π</button>
+    </div>
+
+    <!-- ===== Versions ===== -->
+    <div id="view-versions" role="tabpanel" aria-labelledby="tab-versions" style="display:grid; gap:14px;">
+      <p class="prose">One row per model version, 74 in all: the 64 versions of the main study plus 10 rebuilds of unsloth's recipe from follow-up 3. Click a column header to sort, and hover over it to see what it measures. Shading marks where each value sits among the rows shown, darker for larger. It shows magnitude, not better or worse.</p>
+      <div class="controls">
+        <div class="chips" id="v-models"></div>
+        <label>Build <select id="v-group"></select></label>
+        <label><input type="search" id="v-search" placeholder="Filter versions, e.g. Q4_K_M"></label>
+        <label><input type="checkbox" id="v-shade" checked> Shade</label>
+      </div>
+      <div class="controls">
+        <span class="count">Columns:</span>
+        <div class="chips" id="v-colgroups"></div>
+      </div>
+      <div class="controls">
+        <span class="count" id="v-count"></span>
+        <button class="btn" id="v-download">Download these rows (CSV)</button>
+        <span class="count">Full tables: <a href="data/qwen3.5-4b_headline.csv">4B</a> · <a href="data/qwen3.5-9b_headline.csv">9B</a> · <a href="data/qwen3.8-27b_headline.csv">27B</a></span>
+      </div>
+      <div class="table-wrap sheet"><table id="v-table"></table></div>
+      <details>
+        <summary>What every column means</summary>
+        <dl class="cols" id="v-glossary" style="margin-top:12px;"></dl>
+      </details>
+    </div>
+
+    <!-- ===== Test answers ===== -->
+    <div id="view-answers" role="tabpanel" aria-labelledby="tab-answers" style="display:grid; gap:14px;" hidden>
+      <p class="prose">Every scored answer, one row each: three wordings × three constants for E1, 40 strings for E3, 30 for E4b, 8 planted digits for E5 and π, e and √2 for E6. Error positions use S for a swapped digit, I for an inserted one and D for a dropped one, followed by the position in the expected text. The model's own words aren't published here, only their scores.</p>
+      <div class="controls">
+        <label>Model <select id="a-model"></select></label>
+        <label>Version <select id="a-variant"></select></label>
+        <label>Test <select id="a-exp"></select></label>
+        <label><input type="checkbox" id="a-errors"> Only answers with errors</label>
+      </div>
+      <div class="controls">
+        <span class="count" id="a-count"></span>
+        <div class="pager"><button class="btn" id="a-prev">‹ Prev</button><span class="count" id="a-page"></span><button class="btn" id="a-next">Next ›</button></div>
+        <button class="btn" id="a-download">Download these rows (CSV)</button>
+      </div>
+      <div class="table-wrap sheet"><table id="a-table"></table></div>
+    </div>
+
+    <!-- ===== Per digit ===== -->
+    <div id="view-digits" role="tabpanel" aria-labelledby="tab-digits" style="display:grid; gap:14px;" hidden>
+      <p class="prose">Teacher forcing on the E2 π text. Each row is one version, and each column one digit position: position <i>n</i> is the digit that follows <i>n</i> correct ones, so a free recitation that stops at 813 went wrong at position 813. Hover over a cell for its numbers, and click one to list the positions around it. <a href="method.html#teacher-forcing">How teacher forcing works</a>.</p>
+      <div class="controls">
+        <label>Model <select id="d-model"></select></label>
+        <label>Colour by <select id="d-metric">
+          <option value="odds">how sure of the right digit</option>
+          <option value="kl">noise (KL from the reference)</option>
+        </select></label>
+        <label>Positions <input type="number" id="d-from" min="0" max="999" value="0"> to <input type="number" id="d-to" min="0" max="999" value="999"></label>
+        <div class="chips" id="d-groups"></div>
+      </div>
+      <div class="legend" id="d-legend"></div>
+      <div class="heat" id="d-heat">
+        <div class="heat-labels" id="d-labels"></div>
+        <div><canvas id="d-canvas"></canvas><div class="axis" id="d-axis"></div></div>
+      </div>
+      <div id="d-detail" style="display:grid; gap:10px;"></div>
+    </div>
+  </section>
+
+  <footer>
+    <p>Built from <code>scores/</code> and <code>tf/</code> by <code>scripts/build_site.py</code> · <a href="https://github.com/engineeringthefutureai/bits-of-pi">github.com/engineeringthefutureai/bits-of-pi</a></p>
+    <p>Code under the MIT License.</p>
+  </footer>
+</main>
+<div class="tip" id="tip"></div>
+
+<script>
+"use strict";
+const MODELS = { "qwen3.5-4b": "4B", "qwen3.5-9b": "9B", "qwen3.8-27b": "27B" };
+const GROUPS = {
+  reference: "Reference (BF16, or Q8_0 for the 27B)",
+  ladder: "DIY, no imatrix",
+  imatrix: "DIY + own imatrix",
+  usimat: "DIY + unsloth's imatrix",
+  unsloth: "unsloth's file",
+  scheme: "Q4_0 (legacy format)",
+  recipe: "Follow-up 3: unsloth's recipe rebuilt",
+};
+const TESTS = {
+  E1: "E1 · recite from memory", E3: "E3 · copy digits", E4: "E4 · spell as words, first prompt (dropped)",
+  E4b: "E4b · spell as words", E5: "E5 · copy with a planted digit", E6: "E6 · π as words",
+};
+// key: [label, column group, format, description]
+const COLS = {
+  variant: ["Version", "id", "txt", "The model file. The tag after it is the model size."],
+  group: ["Build", "id", "group", "How the file was made: " + Object.entries(GROUPS).map(([k, v]) => `${k} = ${v}`).join("; ") + "."],
+  bpw: ["Bits / weight", "id", "f2", "File size × 8 ÷ number of weights."],
+  file_gb: ["File GB", "id", "f2", "File size in GB (10⁹ bytes)."],
+  E1_pi: ["π digits", "E1", "int", "Correct digits of π before the first mistake, middle of the three wordings."],
+  E1_pi_min: ["π worst", "E1", "int", "π digits, worst of the three wordings."],
+  E1_pi_max: ["π best", "E1", "int", "π digits, best of the three wordings."],
+  E1_e: ["e digits", "E1", "int", "Correct digits of e, middle of three wordings."],
+  E1_sqrt2: ["√2 digits", "E1", "int", "Correct digits of √2, middle of three wordings."],
+  E1_median_prefix: ["All median", "E1", "int", "Middle score over all nine E1 prompts."],
+  E1_min: ["All worst", "E1", "int", "Lowest score over all nine E1 prompts."],
+  E1_max: ["All best", "E1", "int", "Highest score over all nine E1 prompts."],
+  E1_agree_ref: ["Agrees w/ ref", "E1", "int", "How many digits match the reference's own answer, right or wrong (middle of nine prompts)."],
+  E2_kl_pi: ["Noise on π", "E2", "kl", "KL divergence from the reference, averaged over π's 1,000 digit positions. 0.0001 is identical answers, about 0.01 stops recall early, 1 is broken."],
+  E2_kl_random: ["Noise, random", "E2", "kl", "The same on 1,000 random digits, which no model has memorized."],
+  E2_mean_kl: ["Noise, all", "E2", "kl", "Mean noise over π, e, √2 and random digits."],
+  E2_flip_pi: ["Flips vs ref", "E2", "pct", "Share of π positions where this version's top choice differs from the reference's."],
+  E2_pi_wrong: ["π wrong", "E2", "int", "π positions (of 1,000) where the top choice isn't the true digit, fed the true digits before it."],
+  E3_err_per_100: ["Copy err/100", "E3", "f3", "E3 copying: errors per 100 digits, mean over 40 strings."],
+  E3_exact_share: ["Copy exact", "E3", "pct", "Share of E3 strings copied with no error."],
+  E3_len1000_err: ["Copy err, 1000", "E3", "f3", "Errors per 100 digits on the 1,000-digit strings only."],
+  E4b_err_per_100: ["Words err/100", "E3", "f3", "E4b: errors per 100 digits when spelling them as words, mean over 30 strings."],
+  E4b_random_err: ["Words, random", "E3", "f3", "E4b errors on plain random strings."],
+  E4b_runheavy_err: ["Words, runs", "E3", "f3", "E4b errors on strings full of repeated digits."],
+  E4b_parse_errors: ["Words, non-digit", "E3", "int", "Words in E4b answers that aren't digit names."],
+  E4_v1_parse_errors: ["E4 non-digit", "E3", "int", "The same for the first word prompt, which was dropped because the model read it as numbers."],
+  E5_planted_share: ["Planted kept", "E5", "pct", "E5: share of the 8 prompts where the copy keeps the planted wrong digit."],
+  E5_memory_share: ["Memory won", "E5", "pct", "E5: share where the copy swaps it back to the real digit from memory."],
+  E6_median_prefix: ["π as words", "E5", "int", "E6: correct digits of π recited as English words (middle of π, e, √2 runs)."],
+  truncated: ["Hit limit", "E5", "int", "Answers that ran into the writing limit (E3, E4b, E5)."],
+  vram_mib: ["VRAM MiB", "res", "int", "Graphics memory in use during the tests (typical value)."],
+  vram_peak_mib: ["VRAM peak", "res", "int", "Highest graphics memory seen."],
+  vram_overhead_mib: ["VRAM over file", "res", "int", "Graphics memory beyond the file size: conversation memory, buffers, runtime."],
+  host_rss_mib: ["RAM MiB", "res", "int", "Peak ordinary memory of the server process."],
+  tg_in_test_tok_s: ["Write tok/s", "speed", "f1", "Writing speed during the tests, typical value from the server's timings."],
+  tg128_tok_s: ["tg128", "speed", "f1", "llama-bench writing speed, 128 tokens."],
+  pp512_tok_s: ["pp512", "speed", "f0", "llama-bench prompt reading speed, 512 tokens."],
+  pp4096_tok_s: ["pp4096", "speed", "f0", "llama-bench prompt reading speed, 4,096 tokens."],
+  power_w: ["Power W", "speed", "f0", "Mean card power during the tests."],
+  n_gpus: ["GPUs", "speed", "int", "1, or 2 for the 27B files split over both cards."],
+};
+const COLGROUPS = { E1: "Recall E1", E2: "Teacher forcing E2", E3: "Copying E3/E4", E5: "Planted & words E5/E6", res: "Memory", speed: "Speed & power" };
+const SHOWN_GROUPS = new Set(["E1", "E2", "E3", "E5"]);
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const cache = {};
+async function load(name) {
+  if (!cache[name]) cache[name] = fetch("data/" + name).then(r => { if (!r.ok) throw new Error(name); return r.json(); });
+  return cache[name];
+}
+function fmt(v, kind) {
+  if (v === null || v === undefined || v === "") return "–";
+  switch (kind) {
+    case "int": return Math.round(v).toLocaleString("en-US");
+    case "f0": return v.toFixed(0);
+    case "f1": return v.toFixed(1);
+    case "f2": return v.toFixed(2);
+    case "f3": return v < 10 ? v.toFixed(3) : v.toFixed(1);
+    case "pct": return (100 * v).toFixed(v < 0.1 && v > 0 ? 1 : 0) + "%";
+    case "kl": return v === 0 ? "0" : v >= 0.01 ? v.toPrecision(3) : v.toExponential(1);
+    default: return esc(v);
+  }
+}
+function toCSV(cols, rows) {
+  const q = v => v === null || v === undefined ? "" : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+  return [cols.join(","), ...rows.map(r => r.map(q).join(","))].join("\n") + "\n";
+}
+function download(name, text) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+  a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function chip(label, pressed, onToggle, title) {
+  const b = document.createElement("button");
+  b.className = "chip"; b.type = "button"; b.textContent = label; if (title) b.title = title;
+  b.setAttribute("aria-pressed", pressed);
+  b.addEventListener("click", () => { const now = b.getAttribute("aria-pressed") !== "true"; b.setAttribute("aria-pressed", now); onToggle(now); });
+  return b;
+}
+function stickyHeader(table) {
+  const g = table.querySelector("tr.grp");
+  const top = g ? g.getBoundingClientRect().height : 0;
+  table.querySelectorAll("tr.col th").forEach(th => th.style.top = top + "px");
+}
+
+/* ---------- tabs ---------- */
+const TABS = ["versions", "answers", "digits"];
+const started = {};
+function show(name) {
+  if (!TABS.includes(name)) name = "versions";
+  for (const t of TABS) {
+    $("tab-" + t).setAttribute("aria-selected", t === name);
+    $("view-" + t).hidden = t !== name;
+  }
+  if (!started[name]) { started[name] = true; ({ versions: initVersions, answers: initAnswers, digits: initDigits })[name](); }
+  else if (name === "digits") drawHeat();
+}
+for (const t of TABS) $("tab-" + t).addEventListener("click", () => { history.replaceState(null, "", "#" + t); show(t); });
+window.addEventListener("hashchange", () => show(location.hash.slice(1)));
+
+/* ---------- versions ---------- */
+const V = { data: null, models: new Set(Object.keys(MODELS)), group: "", search: "", groups: new Set(SHOWN_GROUPS), sort: null, dir: 1 };
+async function initVersions() {
+  V.data = await load("versions.json");
+  for (const [m, short] of Object.entries(MODELS))
+    $("v-models").append(chip(short, true, on => { on ? V.models.add(m) : V.models.delete(m); renderVersions(); }));
+  $("v-group").innerHTML = `<option value="">all builds</option>` + Object.entries(GROUPS).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
+  $("v-group").addEventListener("change", e => { V.group = e.target.value; renderVersions(); });
+  $("v-search").addEventListener("input", e => { V.search = e.target.value.trim().toLowerCase(); renderVersions(); });
+  $("v-shade").addEventListener("change", renderVersions);
+  for (const [g, label] of Object.entries(COLGROUPS))
+    $("v-colgroups").append(chip(label, SHOWN_GROUPS.has(g), on => { on ? V.groups.add(g) : V.groups.delete(g); renderVersions(); }));
+  $("v-download").addEventListener("click", () => {
+    const rows = versionRows();
+    download("bits-of-pi_versions.csv", toCSV(V.data.cols, rows));
+  });
+  $("v-glossary").innerHTML = V.data.cols.filter(c => COLS[c]).map(c => `<dt>${esc(c)}</dt><dd><b>${esc(COLS[c][0])}.</b> ${esc(COLS[c][3])}</dd>`).join("");
+  renderVersions();
+}
+function versionRows() {
+  const ci = Object.fromEntries(V.data.cols.map((c, i) => [c, i]));
+  let rows = V.data.rows.filter(r => V.models.has(r[ci.model]) && (!V.group || r[ci.group] === V.group) &&
+    (!V.search || r[ci.variant].toLowerCase().includes(V.search)));
+  if (V.sort) {
+    const i = ci[V.sort];
+    rows = rows.slice().sort((a, b) => {
+      const x = a[i], y = b[i];
+      if (x === null || x === "") return 1;
+      if (y === null || y === "") return -1;
+      return (typeof x === "number" ? x - y : String(x).localeCompare(String(y))) * V.dir;
+    });
+  }
+  return rows;
+}
+function renderVersions() {
+  const cols = V.data.cols, ci = Object.fromEntries(cols.map((c, i) => [c, i]));
+  const shown = cols.filter(c => COLS[c] && (COLS[c][1] === "id" || V.groups.has(COLS[c][1])));
+  const rows = versionRows();
+  const shade = $("v-shade").checked;
+  // per-column position of each value among the rows shown (log scale for noise)
+  const scale = {};
+  for (const c of shown) {
+    const kind = COLS[c][2];
+    if (["txt", "group"].includes(kind)) continue;
+    const t = v => kind === "kl" ? Math.log10(Math.max(v, 1e-6)) : v;
+    const vals = rows.map(r => r[ci[c]]).filter(v => typeof v === "number").map(t);
+    if (vals.length < 2) continue;
+    const lo = Math.min(...vals), hi = Math.max(...vals);
+    if (hi > lo) scale[c] = v => (t(v) - lo) / (hi - lo);
+  }
+  let grp = `<tr class="grp"><th></th>`, head = `<tr class="col">`;
+  let prev = null, span = 0;
+  const groupsInOrder = [];
+  for (const c of shown.slice(1)) {
+    const g = COLS[c][1];
+    if (g === prev) groupsInOrder[groupsInOrder.length - 1][1]++;
+    else groupsInOrder.push([g, 1]);
+    prev = g;
+  }
+  grp += groupsInOrder.map(([g, n]) => `<th colspan="${n}">${g === "id" ? "" : esc(COLGROUPS[g])}</th>`).join("") + "</tr>";
+  for (const c of shown) {
+    const [label, , kind, desc] = COLS[c];
+    const sort = V.sort === c ? (V.dir > 0 ? "ascending" : "descending") : "none";
+    head += `<th data-col="${c}" title="${esc(c + ": " + desc)}" aria-sort="${sort}" class="${["txt", "group"].includes(kind) ? "" : "r"}">${esc(label)}</th>`;
+  }
+  head += "</tr>";
+  const body = rows.map(r => {
+    const isRef = r[ci.group] === "reference";
+    return `<tr${isRef ? ' class="ref"' : ""}>` + shown.map(c => {
+      const v = r[ci[c]], kind = COLS[c][2];
+      if (c === "variant") return `<td class="txt">${esc(v)}<span class="tag">${MODELS[r[ci.model]]}</span></td>`;
+      if (kind === "group") return `<td class="txt" title="${esc(GROUPS[v] || v)}">${esc(v)}</td>`;
+      const s = shade && scale[c] && typeof v === "number" ? scale[c](v) : null;
+      const bg = s === null ? "" : ` style="background:color-mix(in srgb, var(--accent) ${(4 + 30 * s).toFixed(0)}%, var(--surface))"`;
+      return `<td class="r"${bg}>${fmt(v, kind)}</td>`;
+    }).join("") + "</tr>";
+  }).join("");
+  const t = $("v-table");
+  t.innerHTML = `<thead>${grp}${head}</thead><tbody>${body}</tbody>`;
+  t.querySelectorAll("tr.col th").forEach(th => th.addEventListener("click", () => {
+    const c = th.dataset.col;
+    if (V.sort === c) V.dir = -V.dir; else { V.sort = c; V.dir = ["txt", "group"].includes(COLS[c][2]) ? 1 : -1; }
+    renderVersions();
+  }));
+  stickyHeader(t);
+  $("v-count").textContent = `${rows.length} of ${V.data.rows.length} versions · ${shown.length} columns`;
+}
+
+/* ---------- test answers ---------- */
+const A = { model: "qwen3.5-4b", variant: "", exp: "", errors: false, page: 0, data: null };
+const A_COLS = [
+  ["variant", "Version", "txt"], ["exp", "Test", "txt"], ["input_id", "Input", "txt"], ["meta", "Setup", "txt"],
+  ["prefix", "Right before 1st error", "int"], ["errors_per_100", "Errors /100", "f3"], ["edit_distance", "Edits", "int"],
+  ["subs", "Swapped", "int"], ["ins", "Inserted", "int"], ["dels", "Dropped", "int"], ["outcome", "Outcome", "txt"],
+  ["parse_errors", "Non-digit words", "int"], ["hyp_len", "Length written", "int"], ["tokens_out", "Tokens", "int"],
+  ["finish_reason", "Finish", "txt"], ["errors", "Error positions", "wrap"],
+];
+const PAGE = 100;
+async function initAnswers() {
+  $("a-model").innerHTML = Object.entries(MODELS).map(([m, s]) => `<option value="${m}">${s} · ${m}</option>`).join("");
+  $("a-exp").innerHTML = `<option value="">all tests</option>` + Object.entries(TESTS).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
+  $("a-model").addEventListener("change", async e => { A.model = e.target.value; A.variant = ""; A.page = 0; await loadAnswers(); });
+  $("a-variant").addEventListener("change", e => { A.variant = e.target.value; A.page = 0; renderAnswers(); });
+  $("a-exp").addEventListener("change", e => { A.exp = e.target.value; A.page = 0; renderAnswers(); });
+  $("a-errors").addEventListener("change", e => { A.errors = e.target.checked; A.page = 0; renderAnswers(); });
+  $("a-prev").addEventListener("click", () => { A.page = Math.max(0, A.page - 1); renderAnswers(); });
+  $("a-next").addEventListener("click", () => { A.page++; renderAnswers(); });
+  $("a-download").addEventListener("click", () => download(`bits-of-pi_answers_${A.model}.csv`, toCSV(A.data.cols, answerRows())));
+  await loadAnswers();
+}
+async function loadAnswers() {
+  $("a-count").textContent = "loading…";
+  A.data = await load(`runs_${A.model}.json`);
+  const versions = (await load("versions.json")).rows.filter(r => r[0] === A.model).map(r => r[1]);
+  $("a-variant").innerHTML = `<option value="">all versions</option>` + versions.map(v => `<option>${esc(v)}</option>`).join("");
+  renderAnswers();
+}
+function answerRows() {
+  const ci = Object.fromEntries(A.data.cols.map((c, i) => [c, i]));
+  return A.data.rows.filter(r => (!A.variant || r[ci.variant] === A.variant) && (!A.exp || r[ci.exp] === A.exp) &&
+    (!A.errors || (r[ci.edit_distance] > 0) || (r[ci.exp] === "E5" && r[ci.outcome] !== "planted")));
+}
+function renderAnswers() {
+  const ci = Object.fromEntries(A.data.cols.map((c, i) => [c, i]));
+  const rows = answerRows();
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE));
+  A.page = Math.min(A.page, pages - 1);
+  const slice = rows.slice(A.page * PAGE, (A.page + 1) * PAGE);
+  const head = `<tr class="col">` + A_COLS.map(([c, l, k]) => `<th class="${["txt", "wrap"].includes(k) ? "" : "r"}" style="cursor:default">${esc(l)}</th>`).join("") + "</tr>";
+  const body = slice.map(r => "<tr>" + A_COLS.map(([c, , k]) => {
+    const v = r[ci[c]];
+    if (c === "exp") return `<td class="txt" title="${esc(TESTS[v] || v)}">${esc(v)}</td>`;
+    if (k === "txt") return `<td class="txt">${v === null || v === undefined ? "–" : esc(v)}</td>`;
+    if (k === "wrap") return `<td class="txt clip" title="${esc(v || "")}">${esc(v || "")}</td>`;
+    return `<td class="r">${fmt(v, k)}</td>`;
+  }).join("") + "</tr>").join("");
+  const t = $("a-table");
+  t.innerHTML = `<thead>${head}</thead><tbody>${body}</tbody>`;
+  stickyHeader(t);
+  $("a-count").textContent = `${rows.length.toLocaleString("en-US")} answers`;
+  $("a-page").textContent = `page ${A.page + 1} of ${pages}`;
+  $("a-prev").disabled = A.page === 0;
+  $("a-next").disabled = A.page >= pages - 1;
+}
+
+/* ---------- per digit ---------- */
+const D = { model: "qwen3.5-4b", metric: "odds", from: 0, to: 999, hidden: new Set(["recipe"]), data: null, rows: [], cur: null };
+const ROW_H = 16;
+async function initDigits() {
+  $("d-model").innerHTML = Object.entries(MODELS).map(([m, s]) => `<option value="${m}">${s} · ${m}</option>`).join("");
+  $("d-model").addEventListener("change", async e => { D.model = e.target.value; D.cur = null; await loadDigits(); });
+  $("d-metric").addEventListener("change", e => { D.metric = e.target.value; legend(); drawHeat(); renderDetail(); });
+  const range = () => {
+    let a = Math.max(0, Math.min(999, +$("d-from").value || 0)), b = Math.max(0, Math.min(999, +$("d-to").value || 0));
+    if (b < a) [a, b] = [b, a];
+    D.from = a; D.to = b; drawHeat();
+  };
+  $("d-from").addEventListener("change", range);
+  $("d-to").addEventListener("change", range);
+  for (const [g, label] of Object.entries(GROUPS))
+    $("d-groups").append(chip(g, !D.hidden.has(g), on => { on ? D.hidden.delete(g) : D.hidden.add(g); D.cur && renderDetail(); drawHeat(); }, label));
+  const cv = $("d-canvas");
+  cv.addEventListener("mousemove", hover);
+  cv.addEventListener("mouseleave", () => $("tip").style.display = "none");
+  cv.addEventListener("click", e => { const h = hit(e); if (h) { D.cur = h.pos; renderDetail(); drawHeat(); } });
+  new ResizeObserver(() => drawHeat()).observe($("d-heat"));
+  legend();
+  await loadDigits();
+}
+async function loadDigits() {
+  D.data = await load(`pi_${D.model}.json`);
+  drawHeat(); renderDetail();
+}
+// colour scales: one hue, pale for safe and dark for risky; orange marks a wrong top choice
+const PALE = [238, 243, 250], DARK = [16, 61, 120], WRONG = [196, 92, 32];
+const mix = t => PALE.map((p, i) => Math.round(p + (DARK[i] - p) * t));
+function cellColor(v, i) {
+  if (D.metric === "odds") {
+    if (v.rank[i] > 0) return WRONG;
+    const m = v.margin[i];                       // ln(odds): 0 is a tie, 9.2 is 10,000×
+    return mix(1 - Math.min(Math.max(m, 0), 9.21) / 9.21);
+  }
+  const k = v.kl[i];
+  if (k === null) return [205, 210, 216];       // the reference itself
+  return mix(Math.min(Math.max((Math.log10(Math.max(k, 1e-5)) + 5) / 5, 0), 1));   // 1e-5 .. 1
+}
+function legend() {
+  const ramp = `linear-gradient(90deg, rgb(${mix(0)}), rgb(${mix(1)}))`;
+  $("d-legend").innerHTML = D.metric === "odds"
+    ? `<span>sure (10,000× or more)</span><span class="ramp" style="background:${ramp}"></span><span>near-tie (1×)</span><span><span class="sw" style="background:rgb(${WRONG})"></span>top choice is wrong</span><span>Hidden builds are toggled with the chips above.</span>`
+    : `<span>no noise (KL 0.00001 or less)</span><span class="ramp" style="background:${ramp}"></span><span>KL 1 or more</span><span><span class="sw" style="background:rgb(205,210,216)"></span>the reference</span>`;
+}
+function drawHeat() {
+  if (!D.data || $("view-digits").hidden) return;
+  D.rows = D.data.versions.filter(v => !D.hidden.has(v.group));
+  const cv = $("d-canvas"), labels = $("d-labels");
+  labels.style.gridTemplateRows = `repeat(${D.rows.length}, ${ROW_H}px)`;
+  labels.innerHTML = D.rows.map(v => `<div title="${esc(GROUPS[v.group] || v.group)}">${esc(v.variant)}<span class="tag">${v.bpw.toFixed(2)}</span></div>`).join("");
+  const w = cv.parentElement.clientWidth, h = D.rows.length * ROW_H, dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  cv.style.height = h + "px";
+  const ctx = cv.getContext("2d");
+  const n = D.to - D.from + 1, cw = cv.width / n, rh = ROW_H * dpr;
+  const img = ctx.createImageData(cv.width, cv.height), px = img.data;
+  D.rows.forEach((v, r) => {
+    for (let j = 0; j < n; j++) {
+      const [R, G, B] = cellColor(v, D.from + j);
+      const x0 = Math.floor(j * cw), x1 = Math.max(x0 + 1, Math.floor((j + 1) * cw));
+      const y0 = Math.floor(r * rh), y1 = Math.floor((r + 1) * rh) - (rh > 6 ? Math.round(dpr) : 0);   // thin gap between rows
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1 && x < cv.width; x++) {
+        const o = (y * cv.width + x) * 4; px[o] = R; px[o + 1] = G; px[o + 2] = B; px[o + 3] = 255;
+      }
+    }
+  });
+  ctx.putImageData(img, 0, 0);
+  if (D.cur !== null && D.cur >= D.from && D.cur <= D.to) {
+    const x = (D.cur - D.from + 0.5) * cw;
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink");
+    ctx.lineWidth = Math.max(1, dpr);
+    ctx.strokeRect(Math.floor((D.cur - D.from) * cw) - dpr, 0, Math.max(cw, 1) + 2 * dpr, cv.height);
+  }
+  // axis ticks
+  const step = [1, 2, 5, 10, 20, 50, 100, 200].find(s => n / s <= 10) || 200;
+  let ticks = "";
+  for (let p = Math.ceil(D.from / step) * step; p <= D.to; p += step)
+    ticks += `<span style="left:${((p - D.from + 0.5) / n * 100).toFixed(2)}%">${p}</span>`;
+  $("d-axis").innerHTML = ticks;
+}
+function hit(e) {
+  const r = e.target.getBoundingClientRect();
+  const n = D.to - D.from + 1;
+  const j = Math.floor((e.clientX - r.left) / r.width * n), row = Math.floor((e.clientY - r.top) / ROW_H);
+  if (j < 0 || j >= n || row < 0 || row >= D.rows.length) return null;
+  return { pos: D.from + j, v: D.rows[row] };
+}
+function odds(m) { const o = Math.exp(Math.abs(m)); return o >= 1e4 ? o.toExponential(1) + "×" : (o < 10 ? o.toFixed(2) : Math.round(o).toLocaleString("en-US")) + "×"; }
+function hover(e) {
+  const h = hit(e), tip = $("tip");
+  if (!h) { tip.style.display = "none"; return; }
+  const i = h.pos, v = h.v, d = D.data.digits[i];
+  const right = v.rank[i] === 0;
+  tip.innerHTML = `<b>${esc(v.variant)}</b> · position ${i} · true digit <b>${d}</b><br>` +
+    `chance on the true digit: ${(100 * v.p[i]).toFixed(1)}%<br>` +
+    (right ? `top choice, ${odds(v.margin[i])} the runner-up` : `<span style="color:var(--warn)">wrong: ranked ${v.rank[i] + 1}, the top choice is ${odds(v.margin[i])} more likely</span>`) +
+    `<br>noise (KL): ${v.kl[i] === null ? "reference" : fmt(v.kl[i], "kl")}<br><span style="color:var(--muted)">click to list positions ${Math.max(0, i - 8)}–${Math.min(999, i + 8)}</span>`;
+  tip.style.display = "block";
+  const x = e.clientX + 14, y = e.clientY + 14;
+  tip.style.left = Math.min(x, window.innerWidth - tip.offsetWidth - 8) + "px";
+  tip.style.top = Math.min(y, window.innerHeight - tip.offsetHeight - 8) + "px";
+}
+function renderDetail() {
+  const box = $("d-detail");
+  if (D.cur === null || !D.data) { box.innerHTML = `<p class="count">Click a cell to list the positions around it.</p>`; return; }
+  const lo = Math.max(0, D.cur - 8), hi = Math.min(999, D.cur + 8), ps = [];
+  for (let p = lo; p <= hi; p++) ps.push(p);
+  const rows = D.data.versions.filter(v => !D.hidden.has(v.group));
+  const head = `<tr><th>position</th>${ps.map(p => `<th${p === D.cur ? ' style="color:var(--ink)"' : ""}>${p}</th>`).join("")}</tr>` +
+    `<tr><th>true digit</th>${ps.map(p => `<th style="font-size:1rem;color:var(--ink)">${D.data.digits[p]}</th>`).join("")}</tr>`;
+  const body = rows.map(v => `<tr${v.group === "reference" ? ' class="ref"' : ""}><td style="text-align:left">${esc(v.variant)}</td>` + ps.map(p => {
+    const wrong = v.rank[p] > 0;
+    const val = D.metric === "odds" ? (100 * v.p[p]).toFixed(v.p[p] > 0.995 && v.p[p] < 1 ? 1 : 0) + "%" : (v.kl[p] === null ? "ref" : fmt(v.kl[p], "kl"));
+    return `<td class="${wrong ? "flip" : ""}${p === D.cur ? " cur" : ""}" title="${wrong ? "top choice is wrong" : ""}">${val}</td>`;
+  }).join("") + "</tr>").join("");
+  box.innerHTML = `<p class="prose"><b>Positions ${lo}–${hi}${D.metric === "odds" ? ", chance on the true digit" : ", noise (KL from the reference)"}.</b> Orange cells are positions where the version's top choice is not the true digit.</p>` +
+    `<div class="table-wrap"><table class="tf"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+}
+
+show(location.hash.slice(1));
+</script>
+</body>
+</html>

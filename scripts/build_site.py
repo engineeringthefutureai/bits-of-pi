@@ -7,17 +7,23 @@ usage: build_site.py   (run after analyze.py)
 - Every figure any page references is copied from figures/ into docs/figures/.
 """
 
+import csv
 import html
+import json
+import math
 import re
 import shutil
 import sys
 
-from common import FIGURES, ROOT
+import pyarrow.parquet as pq
+
+from common import FIGURES, ROOT, SCORES, TF, load_config, read_jsonl
 
 DOCS = ROOT / "docs"
 REPO = "https://github.com/engineeringthefutureai/bits-of-pi/blob/main/"
 PAGES = {"QUANTIZATION_GUIDE.md": "guide.html"}
-NAV = [("./", "Results"), ("method.html", "How the experiments work"), ("guide.html", "How the model files were made")]
+NAV = [("./", "Results"), ("method.html", "How the experiments work"), ("guide.html", "How the model files were made"),
+       ("data.html", "Raw data")]
 
 
 def nav(current):
@@ -182,8 +188,80 @@ def build_guide():
     (DOCS / "guide.html").write_text(page)
 
 
+def num(x, digits=4):
+    """Round for the browser: floats to `digits` significant figures, NaN/None to None."""
+    if x is None or x == "" or x == "None":
+        return None
+    x = float(x)
+    if math.isnan(x):
+        return None
+    if x == int(x) and abs(x) < 1e15:
+        return int(x)
+    return float(f"{x:.{digits}g}")
+
+
+def error_list(errors, limit=40):
+    """'S@10 I@94 …' from a scored record's alignment errors (op and position in the reference)."""
+    if not errors:
+        return ""
+    s = " ".join(f"{e['op']}@{e['ref_pos']}" for e in errors[:limit])
+    return s + (f" … (+{len(errors) - limit})" if len(errors) > limit else "")
+
+
+def export_data():
+    """docs/data/: the headline table of every model, every scored test answer and per-digit
+    teacher forcing on π, as compact JSON for data.html, plus the headline CSVs for download.
+    Model outputs are not included: they live only in the raw run logs, which are not published."""
+    out = DOCS / "data"
+    shutil.rmtree(out, ignore_errors=True)
+    out.mkdir(parents=True)
+    cfg = load_config()
+    versions = {"cols": None, "rows": []}
+    for model in cfg["models"]:
+        p = SCORES / f"{model}_headline.csv"
+        if not p.exists():
+            continue
+        shutil.copy2(p, out / p.name)
+        with open(p) as f:
+            rows = list(csv.DictReader(f))
+        cols = ["model"] + list(rows[0])
+        versions["cols"] = versions["cols"] or cols
+        for r in rows:
+            versions["rows"].append([model] + [r[c] if c in ("variant", "group") else num(r[c])
+                                               for c in cols[1:]])
+
+        recs = read_jsonl(SCORES / f"{model}.jsonl")
+        rcols = ["variant", "exp", "input_id", "meta", "prefix", "errors_per_100", "edit_distance",
+                 "subs", "ins", "dels", "outcome", "parse_errors", "hyp_len", "tokens_out", "finish_reason",
+                 "errors"]
+        runs = [[r["variant"], r["exp"], r["input_id"],
+                 " ".join(f"{k}={v}" for k, v in r.get("meta", {}).items()),
+                 r.get("prefix"), num(r.get("errors_per_100")), r.get("edit_distance"), r.get("subs"),
+                 r.get("ins"), r.get("dels"), r.get("outcome"), r.get("parse_errors"), r.get("hyp_len"),
+                 r.get("tokens_out"), r.get("finish_reason"), error_list(r.get("errors"))] for r in recs]
+        (out / f"runs_{model}.json").write_text(json.dumps({"cols": rcols, "rows": runs}, separators=(",", ":")))
+
+        # per-digit teacher forcing on π, in the order of the headline table (most bits first)
+        digits, tf = None, []
+        for r in rows:
+            q = TF / model / r["variant"] / "pi.parquet"
+            if not q.exists():
+                continue
+            d = pq.read_table(q).to_pandas()
+            digits = digits or "".join(d["digit"])
+            tf.append({"variant": r["variant"], "group": r["group"], "bpw": num(r["bpw"]),
+                       "p": [num(math.exp(x), 3) for x in d["logprob"]],
+                       "rank": [int(x) for x in d["rank"]],
+                       "margin": [num(x, 3) for x in d["margin"]],
+                       "kl": [num(x, 3) for x in d["kl_vs_ref"]]})
+        (out / f"pi_{model}.json").write_text(json.dumps({"digits": digits, "versions": tf}, separators=(",", ":")))
+    (out / "versions.json").write_text(json.dumps(versions, separators=(",", ":")))
+    return sorted(f.name for f in out.iterdir())
+
+
 def main():
     build_guide()
+    files = export_data()
     pages = sorted(DOCS.glob("*.html"))
     wanted = sorted({f for p in pages for f in re.findall(r'src="figures/([^"]+)"', p.read_text())})
     missing = [f for f in wanted if not (FIGURES / f).exists()]
@@ -195,7 +273,8 @@ def main():
     for f in wanted:
         shutil.copy2(FIGURES / f, out / f)
     (DOCS / ".nojekyll").touch()
-    print(f"docs/: guide.html generated, {len(pages)} pages, {len(wanted)} figures copied")
+    print(f"docs/: guide.html generated, {len(pages)} pages, {len(wanted)} figures copied, "
+          f"{len(files)} data files")
 
 
 if __name__ == "__main__":
