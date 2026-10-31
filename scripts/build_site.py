@@ -27,7 +27,14 @@ SITE = "https://bits-of-pi.engineeringthefuture.ai/"
 GITHUB = "https://github.com/engineeringthefutureai/bits-of-pi"
 REPO = GITHUB + "/blob/main/"
 NAME = "Qwen Digit Recall"
-SHARE_IMAGE = "H5_model_size.png"
+SHARE_IMAGE = "og.png"  # link-preview card, kept in docs/
+# Social previews show about 125 characters, so og:description is shorter than the description Google shows.
+OG_DESCRIPTIONS = {
+    "index.html": "How quantization affects π recall: 64 GGUF versions of Qwen 3.5 4B, 9B and Qwen 3.8 27B, from BF16 down to 2 bits.",
+    "method.html": "The seven tests behind Qwen Digit Recall, with real prompts and answers, and teacher forcing explained step by step.",
+    "guide.html": "How every model file in the study was made: Qwen 3.5's layers, quantization types, recipes and the imatrix.",
+    "data.html": "Every number behind Qwen Digit Recall: 64 GGUF versions, every scored answer, and per-digit certainty for π.",
+}
 KEYWORDS = ["quantization", "GGUF", "llama.cpp", "Qwen 3.5", "Qwen 3.8", "digits of pi", "memorization",
             "KL divergence", "teacher forcing", "imatrix", "K-quants", "bits per weight"]
 PAGES = {"QUANTIZATION_GUIDE.md": "guide"}
@@ -311,7 +318,7 @@ def structured_data(name, title, description, author, files):
         del item["author"]
     else:
         item = {"@type": "Article" if name == "index.html" else "TechArticle", **common, "headline": title,
-                "image": SITE + "figures/" + SHARE_IMAGE}
+                "image": SITE + SHARE_IMAGE}
     return json.dumps({"@context": "https://schema.org", "@graph": [site, item]}, ensure_ascii=False, indent=1)
 
 
@@ -322,16 +329,19 @@ def seo(page, files):
     title = html.unescape(re.search(r"<title>([^<]*)</title>", text)[1])
     description = html.unescape(re.search(r'<meta name="description" content="([^"]*)">', text)[1])
     author = re.search(r'<meta name="author" content="([^"]*)">', text)[1]
-    w, h = png_size(FIGURES / SHARE_IMAGE)
+    w, h = png_size(DOCS / SHARE_IMAGE)
     block = (f'<!-- seo -->\n<link rel="canonical" href="{page_url(page.name)}">\n'
              f'<meta property="og:site_name" content="{NAME}">\n'
              f'<meta property="og:image:width" content="{w}">\n<meta property="og:image:height" content="{h}">\n'
-             '<meta property="og:image:alt" content="π digits recalled against bits per weight for Qwen 3.5 4B, '
-             '9B and Qwen 3.8 27B">\n'
+             '<meta property="og:image:alt" content="Qwen Digit Recall: digits of π recited correctly against bits '
+             'per weight for Qwen 3.5 4B, Qwen 3.5 9B and Qwen 3.8 27B. All three lose digits at Q4_K_M, about 5 bits.">\n'
              '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
              '<script type="application/ld+json">\n'
              + structured_data(page.name, title, description, author, files) + "\n</script>\n<!-- /seo -->\n")
     text = text.replace("</head>", block + "</head>", 1)
+    if page.name in OG_DESCRIPTIONS:
+        text = re.sub(r'<meta property="og:description" content="[^"]*">',
+                      f'<meta property="og:description" content="{OG_DESCRIPTIONS[page.name]}">', text, count=1)
 
     def sized(m):
         tag = re.sub(r' (width|height|loading|decoding)="[^"]*"', "", m[0])
