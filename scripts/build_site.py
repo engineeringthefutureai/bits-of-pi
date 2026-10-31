@@ -32,14 +32,28 @@ KEYWORDS = ["quantization", "GGUF", "llama.cpp", "Qwen 3.5", "Qwen 3.8", "digits
             "KL divergence", "teacher forcing", "imatrix", "K-quants", "bits per weight"]
 PAGES = {"QUANTIZATION_GUIDE.md": "guide"}
 # Pages are linked without ".html": GitHub Pages serves method.html at /method.
-NAV = [("./", "Results"), ("method", "How the experiments work"), ("guide", "How the model files were made"),
-       ("data", "Raw data")]
+NAV = [("./", "Results"), ("method", "Method"), ("guide", "Guide"), ("data", "Raw data")]
 
 
-def nav(current):
-    links = "".join(f'<a href="{href}"{" aria-current=\"page\"" if href == current else ""}>{label}</a>'
+def nav(current, root=""):
+    """The sticky top bar: brand, page links and GitHub. root="/" gives absolute links (for 404.html)."""
+    def url(href):
+        return (root or "./") if href == "./" else root + href
+    links = "".join(f'<a href="{url(href)}"{" aria-current=\"page\"" if href == current else ""}>{label}</a>'
                     for href, label in NAV)
-    return f'  <nav class="site-nav" aria-label="Pages">{links}</nav>\n'
+    return ('<header class="topbar"><div class="topbar-in">'
+            f'<a class="brand" href="{url("./")}"><span class="pi">π</span><span>Bits of Pi</span>'
+            f'<span class="sep">/</span><span class="sub">{NAME}</span></a>'
+            f'<nav class="site-nav" aria-label="Pages">{links}<a class="ext" href="{GITHUB}">GitHub</a></nav>'
+            "</div></header>\n")
+
+
+def set_topbar(page):
+    """Put the current top bar into a hand-edited page."""
+    current = "./" if page.name == "index.html" else page.stem
+    text = re.sub(r'<header class="topbar">.*?</header>\n|  <nav class="site-nav"[^\n]*</nav>\n', "",
+                  page.read_text())
+    page.write_text(text.replace("<body>\n", "<body>\n" + nav(current), 1))
 
 
 def head(title, description, path):
@@ -189,7 +203,7 @@ def build_guide():
     page = head(f"How the GGUF Model Files Were Made · {NAME}",
                 "How every Qwen model file in the study was made: the layers inside Qwen 3.5, what "
                 "quantization does to each of them, recipes, and what an imatrix is.", "guide")
-    page += ("<body>\n\n<main>\n" + nav("guide") +
+    page += ("<body>\n" + nav("guide") + "\n<main>\n" +
              '  <header style="display:grid; gap:14px;">\n'
              '    <div class="eyebrow">Qwen Digit Recall · background</div>\n'
              f"    <h1>{title}</h1>\n    <p class=\"lede\">{lede}</p>\n  </header>\n\n" + body +
@@ -330,8 +344,7 @@ def not_found():
     page = head(f"Page not found · {NAME}", "This page does not exist.", "404")
     page = page.replace('href="style.css"', 'href="/style.css"').replace(
         '<meta name="viewport"', '<meta name="robots" content="noindex">\n<meta name="viewport"')
-    links = nav(None).replace('href="', 'href="/').replace('href="/./"', 'href="/"')
-    page += ("<body>\n\n<main>\n" + links +
+    page += ("<body>\n" + nav(None, root="/") + "\n<main>\n" +
              '  <header style="display:grid; gap:14px;">\n'
              f'    <div class="eyebrow">{NAME}</div>\n    <h1>Page not found</h1>\n'
              '    <p class="lede">There is nothing at this address. The results, the method, the guide to the model '
@@ -405,6 +418,8 @@ def main():
         shutil.copy2(FIGURES / f, out / f)
     data_files = [p.name for p in (DOCS / "downloads").iterdir()]
     for page in sorted(DOCS.glob("*.html")):
+        if page.name not in ("404.html", "guide.html"):
+            set_topbar(page)
         if page.name != "404.html":
             seo(page, data_files)
     crawler_files()

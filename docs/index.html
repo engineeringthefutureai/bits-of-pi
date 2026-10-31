@@ -14,7 +14,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232a78d6'/%3E%3Ctext x='32' y='46' font-family='Georgia,serif' font-size='44' text-anchor='middle' fill='white'%3E%CF%80%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 <!-- seo -->
 <link rel="canonical" href="https://bits-of-pi.engineeringthefuture.ai/">
@@ -57,9 +57,9 @@
 <!-- /seo -->
 </head>
 <body>
+<header class="topbar"><div class="topbar-in"><a class="brand" href="./"><span class="pi">π</span><span>Bits of Pi</span><span class="sep">/</span><span class="sub">Qwen Digit Recall</span></a><nav class="site-nav" aria-label="Pages"><a href="./" aria-current="page">Results</a><a href="method">Method</a><a href="guide">Guide</a><a href="data">Raw data</a><a class="ext" href="https://github.com/engineeringthefutureai/bits-of-pi">GitHub</a></nav></div></header>
 
 <main>
-  <nav class="site-nav" aria-label="Pages"><a href="./" aria-current="page">Results</a><a href="method">How the experiments work</a><a href="guide">How the model files were made</a><a href="data">Raw data</a></nav>
   <header style="display:grid; gap:14px;">
     <div class="eyebrow">Quantization and digit recall · Phases 1–3 and follow-ups</div>
     <h1>Qwen Digit Recall</h1>
@@ -102,11 +102,11 @@
 
   <section>
     <h2>Verdicts</h2>
-    <div class="table-wrap">
+    <div class="table-wrap breakout">
       <table>
         <thead><tr><th>Hypothesis</th><th>4B</th><th>9B</th><th>27B</th><th>What decided it</th></tr></thead>
         <tbody>
-          <tr><td>H1 · Recall survives to about 4 bits, then falls off a cliff</td><td><span class="verdict v-open">Partly</span></td><td><span class="verdict v-open">Partly</span></td><td><span class="verdict v-open">Partly</span></td><td>Recall does hold down to a threshold, but it sits well above 4 bits. The 4B keeps all 1,000 digits only at Q8_0 (8.5 bits per weight) and declines step by step from 6.6. The 9B keeps 1,000+ to 5.8 and halves between 5.0 and 4.1. The 27B keeps its 1,046 to 5.1 and halves at 4.9. Q4_K_M itself measures 4.9 to 5.2 bits per weight</td></tr>
+          <tr><td>H1 · Recall survives to about 4 bits, then falls off a cliff</td><td><span class="verdict v-part">Partly</span></td><td><span class="verdict v-part">Partly</span></td><td><span class="verdict v-part">Partly</span></td><td>Recall does hold down to a threshold, but it sits well above 4 bits. The 4B keeps all 1,000 digits only at Q8_0 (8.5 bits per weight) and declines step by step from 6.6. The 9B keeps 1,000+ to 5.8 and halves between 5.0 and 4.1. The 27B keeps its 1,046 to 5.1 and halves at 4.9. Q4_K_M itself measures 4.9 to 5.2 bits per weight</td></tr>
           <tr><td>H2 · Errors start where the model was least sure</td><td><span class="verdict v-yes">Confirmed</span></td><td><span class="verdict v-yes">Confirmed</span></td><td><span class="verdict v-yes">Confirmed</span></td><td>Recall stops on uncertain digits: the 12th (4B), 6th (9B) and 2nd (27B) percentile of the reference's certainty</td></tr>
           <tr><td>H3 · Copying holds up, and fails by skipping digits in runs</td><td><span class="verdict v-yes">Confirmed</span></td><td><span class="verdict v-yes">Confirmed</span></td><td><span class="verdict v-yes">Confirmed</span></td><td>Copying is near perfect down to 4.3 bpw (4B), 3.4 (9B) and 2.9 (27B, even plain Q2_K). Errors are missing digits inside runs, even in the reference</td></tr>
           <tr><td>H4 · The compression scheme matters at equal size</td><td><span class="verdict v-yes">Confirmed</span></td><td><span class="verdict v-yes">Confirmed</span></td><td><span class="verdict v-yes">Confirmed</span></td><td>K-quants beat Q4_0. unsloth's recipe beats standard builds (on the 27B from 4 bits down). A number-free imatrix doesn't protect π</td></tr>
@@ -115,7 +115,7 @@
         </tbody>
       </table>
     </div>
-    <div class="takeaways">
+    <div class="takeaways breakout">
       <div class="takeaway"><b>Q8_0 costs nothing</b><span>Same answers as BF16 on every test at 4B and 9B, 1.7–1.9× faster writing, about half the graphics memory.</span></div>
       <div class="takeaway"><b>Exact recall needs many bits</b><span>4B: stay at Q6_K or above. 9B: Q5_K_M keeps 1,000+ digits of π. 27B: Q5_K_M keeps all 1,046 it knows, Q4_K_M keeps 463.</span></div>
       <div class="takeaway"><b>Copying survives to Q3</b><span>And to Q2_K with an imatrix, at every size. Plain Q2_K breaks the 4B and 9B, though not the 27B.</span></div>
