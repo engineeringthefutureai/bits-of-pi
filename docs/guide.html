@@ -3,24 +3,63 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>How the Model Files Were Made</title>
+<title>How the GGUF Model Files Were Made · Qwen Digit Recall</title>
 <meta name="description" content="How every Qwen model file in the study was made: the layers inside Qwen 3.5, what quantization does to each of them, recipes, and what an imatrix is.">
 <meta name="author" content="Kiryl Dubarenka">
 <meta property="og:type" content="article">
-<meta property="og:title" content="How the Model Files Were Made">
+<meta property="og:title" content="How the GGUF Model Files Were Made · Qwen Digit Recall">
 <meta property="og:description" content="How every Qwen model file in the study was made: the layers inside Qwen 3.5, what quantization does to each of them, recipes, and what an imatrix is.">
-<meta property="og:url" content="https://bits-of-pi.engineeringthefuture.ai/guide.html">
+<meta property="og:url" content="https://bits-of-pi.engineeringthefuture.ai/guide">
 <meta property="og:image" content="https://bits-of-pi.engineeringthefuture.ai/figures/H5_model_size.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232a78d6'/%3E%3Ctext x='32' y='46' font-family='Georgia,serif' font-size='44' text-anchor='middle' fill='white'%3E%CF%80%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap">
 <link rel="stylesheet" href="style.css">
+<!-- seo -->
+<link rel="canonical" href="https://bits-of-pi.engineeringthefuture.ai/guide">
+<meta property="og:site_name" content="Qwen Digit Recall">
+<meta property="og:image:width" content="1560">
+<meta property="og:image:height" content="1235">
+<meta property="og:image:alt" content="π digits recalled against bits per weight for Qwen 3.5 4B, 9B and Qwen 3.8 27B">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "WebSite",
+   "@id": "https://bits-of-pi.engineeringthefuture.ai/#site",
+   "name": "Qwen Digit Recall",
+   "url": "https://bits-of-pi.engineeringthefuture.ai/"
+  },
+  {
+   "@type": "TechArticle",
+   "name": "How the GGUF Model Files Were Made · Qwen Digit Recall",
+   "description": "How every Qwen model file in the study was made: the layers inside Qwen 3.5, what quantization does to each of them, recipes, and what an imatrix is.",
+   "url": "https://bits-of-pi.engineeringthefuture.ai/guide",
+   "inLanguage": "en",
+   "author": {
+    "@type": "Person",
+    "name": "Kiryl Dubarenka",
+    "url": "https://github.com/engineeringthefutureai/bits-of-pi"
+   },
+   "isPartOf": {
+    "@id": "https://bits-of-pi.engineeringthefuture.ai/#site"
+   },
+   "keywords": "quantization, GGUF, llama.cpp, Qwen 3.5, Qwen 3.8, digits of pi, memorization, KL divergence, teacher forcing, imatrix, K-quants, bits per weight",
+   "headline": "How the GGUF Model Files Were Made · Qwen Digit Recall",
+   "image": "https://bits-of-pi.engineeringthefuture.ai/figures/H5_model_size.png"
+  }
+ ]
+}
+</script>
+<!-- /seo -->
 </head>
 <body>
 
 <main>
-  <nav class="site-nav" aria-label="Pages"><a href="./">Results</a><a href="method.html">How the experiments work</a><a href="guide.html" aria-current="page">How the model files were made</a><a href="data.html">Raw data</a></nav>
+  <nav class="site-nav" aria-label="Pages"><a href="./">Results</a><a href="method">How the experiments work</a><a href="guide" aria-current="page">How the model files were made</a><a href="data">Raw data</a></nav>
   <header style="display:grid; gap:14px;">
     <div class="eyebrow">Qwen Digit Recall · background</div>
     <h1>How the model files were made</h1>
@@ -41,7 +80,7 @@
     <ol class="prose"><li>A <b>token mixer</b>, which lets each position read information from earlier positions. Qwen 3.5 uses two kinds:<ul class="prose"><li><b>Full attention</b> (every 4th layer, 8 of the 32). Each position compares itself with every earlier one and pulls in what's relevant, which costs memory that grows with the length of the text (the KV cache). The 4B uses 16 query heads sharing 4 key/value heads.</li><li><b>Linear attention</b>, specifically Gated DeltaNet (the other 24 layers). Instead of looking back at every earlier position, it keeps a fixed-size running state and updates it at each token, deciding how much of the old state to keep and how strongly to write the new token in. It's much cheaper on long texts. llama.cpp files its tensors under <code>ssm_*</code> names, after the state-space models it resembles.</li></ul></li><li>A <b>feed-forward network</b> that transforms each position on its own (a SwiGLU block of three matrices).</li></ol>
     <p class="prose">Small <b>normalization</b> steps sit between the parts and keep the numbers in a stable range.</p>
     <figure>
-      <div class="plate"><img src="figures/qwen3.5-4b_architecture.png" alt="The 32-layer stack of Qwen 3.5 4B, and the tensors inside a linear-attention layer and a full-attention layer"></div>
+      <div class="plate"><img src="figures/qwen3.5-4b_architecture.png" alt="The 32-layer stack of Qwen 3.5 4B, and the tensors inside a linear-attention layer and a full-attention layer" width="1950" height="990" loading="lazy" decoding="async"></div>
       <figcaption><b>How to read it.</b> Read everything bottom up. The left column is the whole model. Tokens enter through <code>token_embd</code>, pass the 32 layers and leave through <code>output</code>, which on the 4B reuses the embedding table, while the bars show the fixed pattern of three linear-attention layers (blue) and one full-attention layer (orange). The two panels open up one layer of each kind. Each box is a tensor, coloured by its part and labelled with its share of the model's weights. Dotted lines are skip connections. Each half adds its result to the running vector at the + circles. Both kinds of layer end in the same feed-forward block, and it holds over half of all the weights.</figcaption>
     </figure>
     <h3 id="tensors">Tensors</h3>

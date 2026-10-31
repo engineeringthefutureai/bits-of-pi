@@ -47,7 +47,9 @@ tf/<model>/<variant>/<text>.parquet   E2 per-digit-position records
 scores/              scored rows and headline tables
 figures/             one figure per hypothesis, plus H5_model_size.png across models
 docs/                GitHub Pages site: index.html (results), method.html (how the experiments
-                     work), guide.html (generated from QUANTIZATION_GUIDE.md), style.css, figures
+                     work), guide.html (generated from QUANTIZATION_GUIDE.md), data.html (raw data,
+                     served from downloads/), style.css, figures, and the generated robots.txt,
+                     sitemap.xml, llms.txt and 404.html
 scripts/             make_inputs, pipeline, run_gen, run_tf, e0, score, analyze, sampling,
                      arch_figure (the layer diagram)
 tools/tf_dump.cpp    teacher-forced logit dump, linked to the pinned llama.cpp build

@@ -3,24 +3,125 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Raw Data</title>
-<meta name="description" content="Every number behind Qwen Digit Recall: all 64 model versions as a sortable table, every scored test answer, and how sure each version was of each of the first 1,000 digits of π.">
+<title>Raw Data · Qwen Digit Recall</title>
+<meta name="description" content="Every number behind Qwen Digit Recall: 64 GGUF versions in a sortable table, every scored answer, and per-digit certainty for the first 1,000 digits of π.">
 <meta name="author" content="Kiryl Dubarenka">
 <meta property="og:type" content="article">
-<meta property="og:title" content="Raw Data">
-<meta property="og:description" content="Every number behind Qwen Digit Recall: all 64 model versions as a sortable table, every scored test answer, and how sure each version was of each of the first 1,000 digits of π.">
-<meta property="og:url" content="https://bits-of-pi.engineeringthefuture.ai/data.html">
+<meta property="og:title" content="Raw Data · Qwen Digit Recall">
+<meta property="og:description" content="Every number behind Qwen Digit Recall: 64 GGUF versions in a sortable table, every scored answer, and per-digit certainty for the first 1,000 digits of π.">
+<meta property="og:url" content="https://bits-of-pi.engineeringthefuture.ai/data">
 <meta property="og:image" content="https://bits-of-pi.engineeringthefuture.ai/figures/H5_model_size.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232a78d6'/%3E%3Ctext x='32' y='46' font-family='Georgia,serif' font-size='44' text-anchor='middle' fill='white'%3E%CF%80%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap">
 <link rel="stylesheet" href="style.css">
+<!-- seo -->
+<link rel="canonical" href="https://bits-of-pi.engineeringthefuture.ai/data">
+<meta property="og:site_name" content="Qwen Digit Recall">
+<meta property="og:image:width" content="1560">
+<meta property="og:image:height" content="1235">
+<meta property="og:image:alt" content="π digits recalled against bits per weight for Qwen 3.5 4B, 9B and Qwen 3.8 27B">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "WebSite",
+   "@id": "https://bits-of-pi.engineeringthefuture.ai/#site",
+   "name": "Qwen Digit Recall",
+   "url": "https://bits-of-pi.engineeringthefuture.ai/"
+  },
+  {
+   "@type": "Dataset",
+   "name": "Raw Data · Qwen Digit Recall",
+   "description": "Every number behind Qwen Digit Recall: 64 GGUF versions in a sortable table, every scored answer, and per-digit certainty for the first 1,000 digits of π.",
+   "url": "https://bits-of-pi.engineeringthefuture.ai/data",
+   "inLanguage": "en",
+   "isPartOf": {
+    "@id": "https://bits-of-pi.engineeringthefuture.ai/#site"
+   },
+   "keywords": "quantization, GGUF, llama.cpp, Qwen 3.5, Qwen 3.8, digits of pi, memorization, KL divergence, teacher forcing, imatrix, K-quants, bits per weight",
+   "creator": {
+    "@type": "Person",
+    "name": "Kiryl Dubarenka",
+    "url": "https://github.com/engineeringthefutureai/bits-of-pi"
+   },
+   "isAccessibleForFree": true,
+   "license": "https://github.com/engineeringthefutureai/bits-of-pi/blob/main/LICENSE",
+   "sameAs": "https://github.com/engineeringthefutureai/bits-of-pi",
+   "distribution": [
+    {
+     "@type": "DataDownload",
+     "contentUrl": "https://bits-of-pi.engineeringthefuture.ai/downloads/pi_qwen3.5-4b.json",
+     "encodingFormat": "application/json"
+    },
+    {
+     "@type": "DataDownload",
+     "contentUrl": "https://bits-of-pi.engineeringthefuture.ai/downloads/pi_qwen3.5-9b.json",
+     "encodingFormat": "application/json"
+    },
+    {
+     "@type": "DataDownload",
+     "contentUrl": "https://bits-of-pi.engineeringthefuture.ai/downloads/pi_qwen3.8-27b.json",
+     "encodingFormat": "application/json"
+    },
+    {
+     "@type": "DataDownload",
+     "contentUrl": "https://bits-of-pi.engineeringthefuture.ai/downloads/qwen3.5-4b_headline.csv",
+     "encodingFormat": "text/csv"
+    },
+    {
+     "@type": "DataDownload",
+     "contentUrl": "https://bits-of-pi.engineeringthefuture.ai/downloads/qwen3.5-9b_headline.csv",
+     "encodingFormat": "text/csv"
+    },
+    {
+     "@type": "DataDownload",
+     "contentUrl": "https://bits-of-pi.engineeringthefuture.ai/downloads/qwen3.8-27b_headline.csv",
+     "encodingFormat": "text/csv"
+    },
+    {
+     "@type": "DataDownload",
+     "contentUrl": "https://bits-of-pi.engineeringthefuture.ai/downloads/runs_qwen3.5-4b.json",
+     "encodingFormat": "application/json"
+    },
+    {
+     "@type": "DataDownload",
+     "contentUrl": "https://bits-of-pi.engineeringthefuture.ai/downloads/runs_qwen3.5-9b.json",
+     "encodingFormat": "application/json"
+    },
+    {
+     "@type": "DataDownload",
+     "contentUrl": "https://bits-of-pi.engineeringthefuture.ai/downloads/runs_qwen3.8-27b.json",
+     "encodingFormat": "application/json"
+    },
+    {
+     "@type": "DataDownload",
+     "contentUrl": "https://bits-of-pi.engineeringthefuture.ai/downloads/versions.json",
+     "encodingFormat": "application/json"
+    }
+   ],
+   "measurementTechnique": "Greedy generation and teacher-forced logit dumps with llama.cpp",
+   "variableMeasured": [
+    "digits of pi, e and square root of 2 recalled",
+    "digits copied correctly",
+    "per-digit logit margin",
+    "KL divergence from BF16",
+    "VRAM",
+    "tokens per second"
+   ]
+  }
+ ]
+}
+</script>
+<!-- /seo -->
 </head>
 <body>
 
 <main class="wide">
-  <nav class="site-nav" aria-label="Pages"><a href="./">Results</a><a href="method.html">How the experiments work</a><a href="guide.html">How the model files were made</a><a href="data.html" aria-current="page">Raw data</a></nav>
+  <nav class="site-nav" aria-label="Pages"><a href="./">Results</a><a href="method">How the experiments work</a><a href="guide">How the model files were made</a><a href="data" aria-current="page">Raw data</a></nav>
   <header style="display:grid; gap:14px;">
     <div class="eyebrow">Qwen Digit Recall · raw data</div>
     <h1>Raw data</h1>
@@ -50,7 +151,7 @@
       <div class="controls">
         <span class="count" id="v-count"></span>
         <button class="btn" id="v-download">Download these rows (CSV)</button>
-        <span class="count">Full tables: <a href="data/qwen3.5-4b_headline.csv">4B</a> · <a href="data/qwen3.5-9b_headline.csv">9B</a> · <a href="data/qwen3.8-27b_headline.csv">27B</a></span>
+        <span class="count">Full tables: <a href="downloads/qwen3.5-4b_headline.csv">4B</a> · <a href="downloads/qwen3.5-9b_headline.csv">9B</a> · <a href="downloads/qwen3.8-27b_headline.csv">27B</a></span>
       </div>
       <div class="table-wrap sheet"><table id="v-table"></table></div>
       <details>
@@ -78,7 +179,7 @@
 
     <!-- ===== Per digit ===== -->
     <div id="view-digits" role="tabpanel" aria-labelledby="tab-digits" style="display:grid; gap:14px;" hidden>
-      <p class="prose">Teacher forcing on the E2 π text. Each row is one version, and each column one digit position: position <i>n</i> is the digit that follows <i>n</i> correct ones, so a free recitation that stops at 813 went wrong at position 813. Hover over a cell for its numbers, and click one to list the positions around it. <a href="method.html#teacher-forcing">How teacher forcing works</a>.</p>
+      <p class="prose">Teacher forcing on the E2 π text. Each row is one version, and each column one digit position: position <i>n</i> is the digit that follows <i>n</i> correct ones, so a free recitation that stops at 813 went wrong at position 813. Hover over a cell for its numbers, and click one to list the positions around it. <a href="method#teacher-forcing">How teacher forcing works</a>.</p>
       <div class="controls">
         <label>Model <select id="d-model"></select></label>
         <label>Colour by <select id="d-metric">
@@ -170,7 +271,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const cache = {};
 async function load(name) {
-  if (!cache[name]) cache[name] = fetch("data/" + name).then(r => { if (!r.ok) throw new Error(name); return r.json(); });
+  if (!cache[name]) cache[name] = fetch("downloads/" + name).then(r => { if (!r.ok) throw new Error(name); return r.json(); });
   return cache[name];
 }
 function fmt(v, kind) {

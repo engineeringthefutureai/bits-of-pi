@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://bits-of-pi.engineeringthefuture.ai/sitemap.xml

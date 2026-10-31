@@ -3,24 +3,63 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>How the Experiments Work</title>
+<title>How the Experiments Work · Qwen Digit Recall</title>
 <meta name="description" content="The seven tests behind Qwen Digit Recall, with real prompts and answers, and teacher forcing explained step by step with worked examples from Qwen 3.5 4B.">
 <meta name="author" content="Kiryl Dubarenka">
 <meta property="og:type" content="article">
-<meta property="og:title" content="How the Experiments Work">
+<meta property="og:title" content="How the Experiments Work · Qwen Digit Recall">
 <meta property="og:description" content="The seven tests behind Qwen Digit Recall, with real prompts and answers, and teacher forcing explained step by step with worked examples from Qwen 3.5 4B.">
-<meta property="og:url" content="https://bits-of-pi.engineeringthefuture.ai/method.html">
+<meta property="og:url" content="https://bits-of-pi.engineeringthefuture.ai/method">
 <meta property="og:image" content="https://bits-of-pi.engineeringthefuture.ai/figures/H5_model_size.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232a78d6'/%3E%3Ctext x='32' y='46' font-family='Georgia,serif' font-size='44' text-anchor='middle' fill='white'%3E%CF%80%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap">
 <link rel="stylesheet" href="style.css">
+<!-- seo -->
+<link rel="canonical" href="https://bits-of-pi.engineeringthefuture.ai/method">
+<meta property="og:site_name" content="Qwen Digit Recall">
+<meta property="og:image:width" content="1560">
+<meta property="og:image:height" content="1235">
+<meta property="og:image:alt" content="π digits recalled against bits per weight for Qwen 3.5 4B, 9B and Qwen 3.8 27B">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "WebSite",
+   "@id": "https://bits-of-pi.engineeringthefuture.ai/#site",
+   "name": "Qwen Digit Recall",
+   "url": "https://bits-of-pi.engineeringthefuture.ai/"
+  },
+  {
+   "@type": "TechArticle",
+   "name": "How the Experiments Work · Qwen Digit Recall",
+   "description": "The seven tests behind Qwen Digit Recall, with real prompts and answers, and teacher forcing explained step by step with worked examples from Qwen 3.5 4B.",
+   "url": "https://bits-of-pi.engineeringthefuture.ai/method",
+   "inLanguage": "en",
+   "author": {
+    "@type": "Person",
+    "name": "Kiryl Dubarenka",
+    "url": "https://github.com/engineeringthefutureai/bits-of-pi"
+   },
+   "isPartOf": {
+    "@id": "https://bits-of-pi.engineeringthefuture.ai/#site"
+   },
+   "keywords": "quantization, GGUF, llama.cpp, Qwen 3.5, Qwen 3.8, digits of pi, memorization, KL divergence, teacher forcing, imatrix, K-quants, bits per weight",
+   "headline": "How the Experiments Work · Qwen Digit Recall",
+   "image": "https://bits-of-pi.engineeringthefuture.ai/figures/H5_model_size.png"
+  }
+ ]
+}
+</script>
+<!-- /seo -->
 </head>
 <body>
 
 <main>
-  <nav class="site-nav" aria-label="Pages"><a href="./">Results</a><a href="method.html" aria-current="page">How the experiments work</a><a href="guide.html">How the model files were made</a><a href="data.html">Raw data</a></nav>
+  <nav class="site-nav" aria-label="Pages"><a href="./">Results</a><a href="method" aria-current="page">How the experiments work</a><a href="guide">How the model files were made</a><a href="data">Raw data</a></nav>
   <header style="display:grid; gap:14px;">
     <div class="eyebrow">Qwen Digit Recall · method</div>
     <h1>How the experiments work</h1>
@@ -227,7 +266,7 @@
 
     <h3>7. The whole picture</h3>
     <figure>
-      <div class="plate"><img src="figures/qwen3.5-4b_H2_margins.png" alt="How sure the 4B's BF16 is of each of the 1000 digits of π, and for each version the positions where its top choice is wrong."></div>
+      <div class="plate"><img src="figures/qwen3.5-4b_H2_margins.png" alt="How sure the 4B's BF16 is of each of the 1000 digits of π, and for each version the positions where its top choice is wrong." width="1170" height="1190" loading="lazy" decoding="async"></div>
       <figcaption><b>How to read it.</b> Top: BF16's odds at every one of the 1,000 positions, on a log scale. The deep dips are the near-ties, with 813 the deepest. Bottom: one row per version, least compressed at the top, with a dot at every flip. Q6_K's row has two dots, at 813 and 821. Lower rows add more, starting under the dips.</figcaption>
     </figure>
 

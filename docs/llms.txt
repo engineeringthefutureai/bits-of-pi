@@ -1,0 +1,39 @@
+# Qwen Digit Recall
+
+> How weight quantization changes exact recall in Qwen 3.5 4B, Qwen 3.5 9B and Qwen 3.8 27B. 64 GGUF versions,
+> from BF16 down to about 2 bits per weight, were run through llama.cpp and asked to recite π, e and √2 from
+> memory, copy random digits from the prompt, and choose between prompt and memory when a planted digit
+> disagrees with π. A teacher-forced pass records how sure each version was of every digit.
+
+Main findings:
+
+- Recall of π holds only at high bit widths, then declines. Q4_K_M (4.9 to 5.2 bits per weight) lost part of
+  the first 1,000 digits on all three models. Full recall needed Q5_K_M on the 9B and 27B, and Q8_0 on the 4B.
+- Recall stops on digits the uncompressed model was already least sure of.
+- Copying digits from the prompt survives far more compression than recall does.
+- Counted in bits per weight, bigger models take more compression.
+
+This is a learning project. Claude Code ran the experiments and wrote the reports, and the author chose the
+questions and reviewed the results. The conclusions are notes, not peer-reviewed research.
+
+## Pages
+
+- [Results](https://bits-of-pi.engineeringthefuture.ai/): verdicts for hypotheses H1 to H6 on each model, with figures
+- [How the experiments work](https://bits-of-pi.engineeringthefuture.ai/method): the seven tests with real prompts, and teacher forcing explained
+- [How the model files were made](https://bits-of-pi.engineeringthefuture.ai/guide): Qwen 3.5 layers, quantization types, recipes and imatrix
+- [Raw data](https://bits-of-pi.engineeringthefuture.ai/data): every version's scores, every scored answer, per-digit certainty for π
+
+## Reports (Markdown)
+
+- [Phase 1, Qwen 3.5 4B](https://raw.githubusercontent.com/engineeringthefutureai/bits-of-pi/main/REPORT.md)
+- [Phase 2, Qwen 3.5 9B](https://raw.githubusercontent.com/engineeringthefutureai/bits-of-pi/main/REPORT_9B.md)
+- [Phase 3, Qwen 3.8 27B and the three-size comparison](https://raw.githubusercontent.com/engineeringthefutureai/bits-of-pi/main/REPORT_27B.md)
+- [Follow-ups](https://raw.githubusercontent.com/engineeringthefutureai/bits-of-pi/main/REPORT_FOLLOWUP.md)
+- [Test plan and hypotheses](https://raw.githubusercontent.com/engineeringthefutureai/bits-of-pi/main/PLAN.md)
+- [Quantization guide](https://raw.githubusercontent.com/engineeringthefutureai/bits-of-pi/main/QUANTIZATION_GUIDE.md)
+
+## Data
+
+- [All versions, headline columns (JSON)](https://bits-of-pi.engineeringthefuture.ai/downloads/versions.json)
+- Per-model headline tables (CSV): [qwen3.5-4b](https://bits-of-pi.engineeringthefuture.ai/downloads/qwen3.5-4b_headline.csv), [qwen3.5-9b](https://bits-of-pi.engineeringthefuture.ai/downloads/qwen3.5-9b_headline.csv), [qwen3.8-27b](https://bits-of-pi.engineeringthefuture.ai/downloads/qwen3.8-27b_headline.csv)
+- [Source code and scored data](https://github.com/engineeringthefutureai/bits-of-pi)

@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Qwen Digit Recall</title>
-<meta name="description" content="How quantizing Qwen 3.5 4B and 9B and Qwen 3.8 27B affects reciting π, copying digits and choosing prompt over memory, what model size buys, and the VRAM and speed trade-offs.">
+<title>Qwen Digit Recall: How Quantization Affects π Recall</title>
+<meta name="description" content="64 GGUF versions of Qwen 3.5 4B, 9B and Qwen 3.8 27B, from BF16 to 2 bits per weight, tested in llama.cpp on reciting π, copying digits, VRAM and speed.">
 <meta name="author" content="Kiryl Dubarenka">
 <meta property="og:type" content="article">
-<meta property="og:title" content="Qwen Digit Recall">
-<meta property="og:description" content="How quantizing Qwen 3.5 4B and 9B and Qwen 3.8 27B affects reciting π, copying digits and choosing prompt over memory, what model size buys, and the VRAM and speed trade-offs.">
+<meta property="og:title" content="Qwen Digit Recall: How Quantization Affects π Recall">
+<meta property="og:description" content="64 GGUF versions of Qwen 3.5 4B, 9B and Qwen 3.8 27B, from BF16 to 2 bits per weight, tested in llama.cpp on reciting π, copying digits, VRAM and speed.">
 <meta property="og:url" content="https://bits-of-pi.engineeringthefuture.ai/">
 <meta property="og:image" content="https://bits-of-pi.engineeringthefuture.ai/figures/H5_model_size.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -16,11 +16,50 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap">
 <link rel="stylesheet" href="style.css">
+<!-- seo -->
+<link rel="canonical" href="https://bits-of-pi.engineeringthefuture.ai/">
+<meta property="og:site_name" content="Qwen Digit Recall">
+<meta property="og:image:width" content="1560">
+<meta property="og:image:height" content="1235">
+<meta property="og:image:alt" content="π digits recalled against bits per weight for Qwen 3.5 4B, 9B and Qwen 3.8 27B">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "WebSite",
+   "@id": "https://bits-of-pi.engineeringthefuture.ai/#site",
+   "name": "Qwen Digit Recall",
+   "url": "https://bits-of-pi.engineeringthefuture.ai/"
+  },
+  {
+   "@type": "Article",
+   "name": "Qwen Digit Recall: How Quantization Affects π Recall",
+   "description": "64 GGUF versions of Qwen 3.5 4B, 9B and Qwen 3.8 27B, from BF16 to 2 bits per weight, tested in llama.cpp on reciting π, copying digits, VRAM and speed.",
+   "url": "https://bits-of-pi.engineeringthefuture.ai/",
+   "inLanguage": "en",
+   "author": {
+    "@type": "Person",
+    "name": "Kiryl Dubarenka",
+    "url": "https://github.com/engineeringthefutureai/bits-of-pi"
+   },
+   "isPartOf": {
+    "@id": "https://bits-of-pi.engineeringthefuture.ai/#site"
+   },
+   "keywords": "quantization, GGUF, llama.cpp, Qwen 3.5, Qwen 3.8, digits of pi, memorization, KL divergence, teacher forcing, imatrix, K-quants, bits per weight",
+   "headline": "Qwen Digit Recall: How Quantization Affects π Recall",
+   "image": "https://bits-of-pi.engineeringthefuture.ai/figures/H5_model_size.png"
+  }
+ ]
+}
+</script>
+<!-- /seo -->
 </head>
 <body>
 
 <main>
-  <nav class="site-nav" aria-label="Pages"><a href="./" aria-current="page">Results</a><a href="method.html">How the experiments work</a><a href="guide.html">How the model files were made</a><a href="data.html">Raw data</a></nav>
+  <nav class="site-nav" aria-label="Pages"><a href="./" aria-current="page">Results</a><a href="method">How the experiments work</a><a href="guide">How the model files were made</a><a href="data">Raw data</a></nav>
   <header style="display:grid; gap:14px;">
     <div class="eyebrow">Quantization and digit recall · Phases 1–3 and follow-ups</div>
     <h1>Qwen Digit Recall</h1>
@@ -35,11 +74,11 @@
       <dt>Bits per weight (bpw)</dt>
       <dd>How many bits each of the model's numbers takes in the file, measured as file size × 8 ÷ number of weights. The original is 16, and fewer bits mean a smaller file with more rounding error.</dd>
       <dt>Version names</dt>
-      <dd>llama.cpp formats. <b>BF16</b> is the uncompressed original, and in <b>Q8_0 … Q2_K</b> the number is roughly the bits per weight. <b>IQ</b> formats squeeze harder through lookup tables. <b>us_</b> marks a file published by unsloth and <b>UD-</b> unsloth's per-layer recipe. <b>_imat</b> means built with an imatrix, a record of which weights matter most. The full story is on <a href="guide.html">How the model files were made</a>.</dd>
+      <dd>llama.cpp formats. <b>BF16</b> is the uncompressed original, and in <b>Q8_0 … Q2_K</b> the number is roughly the bits per weight. <b>IQ</b> formats squeeze harder through lookup tables. <b>us_</b> marks a file published by unsloth and <b>UD-</b> unsloth's per-layer recipe. <b>_imat</b> means built with an imatrix, a record of which weights matter most. The full story is on <a href="guide">How the model files were made</a>.</dd>
       <dt>Reference, plain ladder</dt>
       <dd>The <b>reference</b> is what everything is compared against: BF16 for the 4B and 9B, Q8_0 for the 27B. The <b>plain ladder</b> is my own Q8_0 down to Q2_K with no imatrix, so only the bit width changes along it.</dd>
       <dt>The tests</dt>
-      <dd><b>E1</b> recites π, e and √2 from memory, <b>E2</b> (teacher forcing) measures how sure the model is of each true digit, <b>E3</b> and <b>E4b</b> copy digits from the prompt, <b>E5</b> copies π with one digit changed, and <b>E6</b> recites π as words. Each one, with examples, is on <a href="method.html">How the experiments work</a>.</dd>
+      <dd><b>E1</b> recites π, e and √2 from memory, <b>E2</b> (teacher forcing) measures how sure the model is of each true digit, <b>E3</b> and <b>E4b</b> copy digits from the prompt, <b>E5</b> copies π with one digit changed, and <b>E6</b> recites π as words. Each one, with examples, is on <a href="method">How the experiments work</a>.</dd>
       <dt>Odds (how sure)</dt>
       <dd>How many times more likely the right digit is than the runner-up. 1× is a dead heat. 4× is shaky, and 10,000× is certain.</dd>
       <dt>Noise</dt>
@@ -91,7 +130,7 @@
     <p class="prose">The sections below cover the 4B in detail. BF16 recites <b>1,000 correct digits of π</b> and stops, because the prompt asks for 1,000. It knows 192 digits of e and only 105 of √2, which leaves π as the one constant with room to watch recall shrink. Recall survives compression only down to Q8_0, 8.5 bits per weight, far above the 4 bits H1 expected. Every standard build below it loses digits, and recall falls below half of BF16's at Q5_K_M, 5.9 bits per weight. Q4_K_M is not really a 4-bit file either: it measures 5.2 bits per weight here, and Q3_K_M at 4.3 is the closest the ladder gets to 4.</p>
     <p class="prose"><b>Why H1 expected recall to hold to about 4 bits.</b> Ollama is for many people the first way they run a model on their own machine, and most models in its library download as Q4_K_M by default. I read that default as a deliberate balance between quality and resources, and for me a good balance means answers close to the original's. On none of the three models did Q4_K_M get there for π. Full recall needed Q5_K_M on the 9B and 27B and Q8_0 on the 4B, where Q6_K kept 813 of 1,000. Copying from the prompt (H3) is the exception, and there Q4_K_M stays close to the original on every model.</p>
     <figure>
-      <div class="plate"><img src="figures/qwen3.5-4b_H1_recall.png" alt="Correct digits of π against bits per weight for all 28 versions of the 4B. The plain ladder falls from 1000 at Q8_0 to 813, 428, 123, 88 and 0."></div>
+      <div class="plate"><img src="figures/qwen3.5-4b_H1_recall.png" alt="Correct digits of π against bits per weight for all 28 versions of the 4B. The plain ladder falls from 1000 at Q8_0 to 813, 428, 123, 88 and 0." width="1430" height="806" loading="lazy" decoding="async"></div>
       <figcaption><b>How to read it.</b> Each marker is one version. Across is bits per weight, up is digits of π before the first mistake (middle of three wordings, whiskers from worst to best), and the dashed line is BF16. Marker shapes follow the table at the top of the page.</figcaption>
     </figure>
     <div class="table-wrap">
@@ -114,7 +153,7 @@
   <section>
     <div class="eyebrow">Phase 1 · 4B · H2 · how sure the model is</div>
     <h2>Errors start at a few near-tie digits</h2>
-    <p class="prose">Feed the model the true digits one at a time, and at each position you can see how sure it was: how many times more likely the right digit was than the runner-up. BF16 gets all 1,000 positions right, and for a typical digit the right answer is about 10,000 times likelier. A handful of digits are nearly tied, though, and recall breaks there first. <a href="method.html#teacher-forcing">How teacher forcing works</a> walks through these digits one by one.</p>
+    <p class="prose">Feed the model the true digits one at a time, and at each position you can see how sure it was: how many times more likely the right digit was than the runner-up. BF16 gets all 1,000 positions right, and for a typical digit the right answer is about 10,000 times likelier. A handful of digits are nearly tied, though, and recall breaks there first. <a href="method#teacher-forcing">How teacher forcing works</a> walks through these digits one by one.</p>
     <div class="ruler" aria-label="Digits of π around positions 326 and 813, with how sure BF16 is of each">
       <div class="ruler-row">
         <div class="ruler-label">π decimals 320–332 · how much likelier BF16 finds the right digit than the runner-up</div>
@@ -160,11 +199,11 @@
       <li>Neighbouring builds can therefore score very differently. My Q6_K recites 813 digits and unsloth's Q6_K 326, with almost the same noise, because both teeter on digit 326 and only mine gets past it.</li>
     </ul>
     <figure>
-      <div class="plate"><img src="figures/qwen3.5-4b_H2_margins.png" alt="How sure the 4B's BF16 is of each of the 1000 digits of π, and for each version the positions where its top choice is wrong."></div>
+      <div class="plate"><img src="figures/qwen3.5-4b_H2_margins.png" alt="How sure the 4B's BF16 is of each of the 1000 digits of π, and for each version the positions where its top choice is wrong." width="1170" height="1190" loading="lazy" decoding="async"></div>
       <figcaption><b>How to read it.</b> Top: how sure BF16 is of each digit of π, as odds against the runner-up on a log scale (1× is a tie, each labelled line is 100 times the one below). Grey is each digit, and the blue line smooths it over 25 digits. Bottom: one row per version from least to most compressed, with a dot wherever its top choice is wrong when fed the true digits. The first dots appear under the deep dips at 326 and 813, then fill in as bits drop.</figcaption>
     </figure>
     <figure>
-      <div class="plate"><img src="figures/qwen3.5-4b_H2_kl.png" alt="Noise on the π text against bits per weight, on a log scale."></div>
+      <div class="plate"><img src="figures/qwen3.5-4b_H2_kl.png" alt="Noise on the π text against bits per weight, on a log scale." width="1040" height="585" loading="lazy" decoding="async"></div>
       <figcaption><b>How to read it.</b> Up is the noise on the π digits, on a log scale where each gridline is 10 times the one below, and across is bits per weight. The plain ladder falls in a nearly straight line, so the noise multiplies by a fixed factor with every bit removed. Noise rises smoothly. Recall jumps in steps, and each step is one particular digit giving way.</figcaption>
     </figure>
   </section>
@@ -187,7 +226,7 @@
     </div>
     <p class="prose"><b>Writing digits as words (E4b).</b> Even BF16 drops digits, always inside runs. Strings with many runs get 2.2 errors per 100 digits, against 0.3 on ordinary random ones, and 75 of BF16's 80 errors are a missing word inside a run of three or more equal digits ("eight eight eight eight eight" written one short). Nothing changes down to about 4.3 bits per weight. Below that the failures turn into <b>extra</b> words as the model gets stuck repeating one. Wrong digits stay rare except in builds that collapse completely.</p>
     <figure>
-      <div class="plate"><img src="figures/qwen3.5-4b_H3_E4b.png" alt="Spell-as-words errors per version, split into wrong, extra and missing digits."></div>
+      <div class="plate"><img src="figures/qwen3.5-4b_H3_E4b.png" alt="Spell-as-words errors per version, split into wrong, extra and missing digits." width="1170" height="1050" loading="lazy" decoding="async"></div>
       <figcaption><b>How to read it.</b> One bar per version, the reference on top. Bar length is the total number of errors over all strings, split into wrong digits (blue), extra ones (orange) and missing ones (green). Most bars are too short to see. Plain Q2_K is mostly green because it stops writing, and the 2-bit and IQ builds are mostly orange because they repeat words.</figcaption>
     </figure>
     <p class="prose">The first word prompt failed. E4 asked to "write each digit as an English word", and the model read that as "say this number" and answered "twenty trillion two hundred…", even at BF16. Those records are kept. E4b adds one example ("507 becomes: five zero seven") and replaces it in the results.</p>
@@ -198,7 +237,7 @@
     <h2>Format, imatrix and recipe all count</h2>
     <p class="prose">Each format was built several ways: a standard build with no imatrix, with my number-free imatrix, with unsloth's imatrix, and unsloth's published file.</p>
     <figure>
-      <div class="plate"><img src="figures/qwen3.5-4b_H4_builds.png" alt="For each format, π digits and noise on π for each build: standard, our imatrix, unsloth's imatrix, unsloth's file."></div>
+      <div class="plate"><img src="figures/qwen3.5-4b_H4_builds.png" alt="For each format, π digits and noise on π for each build: standard, our imatrix, unsloth's imatrix, unsloth's file." width="1560" height="772" loading="lazy" decoding="async"></div>
       <figcaption><b>How to read it.</b> One row per format, most bits at the top. Each marker is one build (shapes as in the table at the top), and the grey bar spans the best and worst build. Left: digits of π, further right is better, with BF16 as the dashed line. Right: noise on π on a log scale, further left is better, with unsloth's larger UD-XL files in the rows marked (XL).</figcaption>
     </figure>
     <div class="table-wrap">
@@ -225,7 +264,7 @@
     <h2>Compression weakens memory's pull</h2>
     <p class="prose">E5 asks for an exact copy of π or e with one digit changed, and only position 10 of π separates the versions. BF16 and almost every build at 4.6 bits per weight or more "correct" it back to the real digit of π. Almost every build at 4.4 or below copies the prompt faithfully. H6 predicted the opposite. It fits H1, though: compression wears away memorized content, so memory competes less with the prompt.</p>
     <figure>
-      <div class="plate"><img src="figures/qwen3.5-4b_H6_planted.png" alt="For each version, how many of 8 planted digits it copied from the prompt, replaced from memory, or got wrong another way."></div>
+      <div class="plate"><img src="figures/qwen3.5-4b_H6_planted.png" alt="For each version, how many of 8 planted digits it copied from the prompt, replaced from memory, or got wrong another way." width="1040" height="1050" loading="lazy" decoding="async"></div>
       <figcaption><b>How to read it.</b> One bar per version, 8 planted digits each. Blue counts the times it copied the prompt faithfully, orange the times it wrote the real digit from memory instead, and dark grey the times the copy failed some other way. The orange slice on the higher builds is π position 10. Exceptions: my Q4_K_M_imat and unsloth's Q4_0 copy faithfully at about 5 bpw, my IQ3_XXS and unsloth's UD-IQ3_XXS revert to memory, and plain Q2_K can't copy at all.</figcaption>
     </figure>
   </section>
@@ -258,11 +297,11 @@
       <li><b>IQ formats are slow here.</b> Unpacking their lookup tables costs more time than the smaller file saves, and UD-XL files write 12–28% slower than plain K-quants of a similar size.</li>
     </ul>
     <figure>
-      <div class="plate"><img src="figures/qwen3.5-4b_vram_quality.png" alt="Digits of π and noise on π against graphics memory used, for all versions."></div>
+      <div class="plate"><img src="figures/qwen3.5-4b_vram_quality.png" alt="Digits of π and noise on π against graphics memory used, for all versions." width="1560" height="598" loading="lazy" decoding="async"></div>
       <figcaption><b>How to read it.</b> The same quality measures, plotted against the graphics memory each version needs (weights, plus the 8k-token conversation memory, plus buffers). Left: digits of π, higher is better. Right: noise on π on a log scale, lower is better, with BF16 as the black star. Use this view to choose a file that fits a given card.</figcaption>
     </figure>
     <figure>
-      <div class="plate"><img src="figures/qwen3.5-4b_speed.png" alt="Writing and prompt speed against bits per weight."></div>
+      <div class="plate"><img src="figures/qwen3.5-4b_speed.png" alt="Writing and prompt speed against bits per weight." width="1560" height="572" loading="lazy" decoding="async"></div>
       <figcaption><b>How to read it.</b> Writing speed during the tests is on the left and prompt reading speed at 4,096 tokens on the right, both against bits per weight. Higher is faster. Plain-ladder points carry their names, and the black star is BF16. The green diamonds and orange squares well below the line on the left are the IQ and UD files.</figcaption>
     </figure>
   </section>
@@ -272,7 +311,7 @@
     <h2>The 9B: no near-ties, sturdier copying</h2>
     <p class="prose">19 versions: unsloth's BF16 reference and 12 published files, my plain ladder from Q6_K to Q2_K, and Q2_K with my imatrix.</p>
     <figure>
-      <div class="plate"><img src="figures/qwen3.5-9b_H1_recall.png" alt="Correct digits of π against bits per weight for the 19 versions of the 9B."></div>
+      <div class="plate"><img src="figures/qwen3.5-9b_H1_recall.png" alt="Correct digits of π against bits per weight for the 19 versions of the 9B." width="1430" height="806" loading="lazy" decoding="async"></div>
       <figcaption><b>How to read it.</b> Each marker is one version. Across is bits per weight, up is digits of π before the first mistake (middle of three wordings, whiskers from worst to best). The dashed line is BF16.</figcaption>
     </figure>
     <ul class="prose">
@@ -282,7 +321,7 @@
       <li><b>e and √2.</b> Both models know exactly 192 digits of e when asked plainly. The 9B reads "e to 1000 decimal places: 2." as a numbered list and "e = 2." as Python code.</li>
     </ul>
     <figure>
-      <div class="plate"><img src="figures/qwen3.5-9b_H2_margins.png" alt="How sure the 9B's BF16 is of each of the 1000 digits of π, and for each version the positions where its top choice is wrong."></div>
+      <div class="plate"><img src="figures/qwen3.5-9b_H2_margins.png" alt="How sure the 9B's BF16 is of each of the 1000 digits of π, and for each version the positions where its top choice is wrong." width="1170" height="933" loading="lazy" decoding="async"></div>
       <figcaption><b>How to read it.</b> Top: how sure BF16 is of each digit, as odds against the runner-up, log scale. Bottom: one row per version, a dot wherever its top choice is wrong when fed the true digits. Builds down to Q5_K_M have no dots at all.</figcaption>
     </figure>
     <div class="table-wrap">
@@ -309,7 +348,7 @@
     <h2>The 27B: knows less π, holds it longer</h2>
     <p class="prose">17 versions: unsloth's Q8_0 as the reference, 10 more unsloth files, my plain ladder from Q6_K to Q2_K, and Q2_K with my imatrix. The three largest files run split across both cards.</p>
     <figure>
-      <div class="plate"><img src="figures/qwen3.8-27b_H1_recall.png" alt="Correct digits of π against bits per weight for the 17 versions of the 27B."></div>
+      <div class="plate"><img src="figures/qwen3.8-27b_H1_recall.png" alt="Correct digits of π against bits per weight for the 17 versions of the 27B." width="1430" height="806" loading="lazy" decoding="async"></div>
       <figcaption><b>How to read it.</b> Each marker is one version. Across is bits per weight, with the most compressed files on the left, and up is how many digits of π it recited before the first mistake, the middle of three wordings, with whiskers from the worst wording to the best. The dashed line is the Q8_0 reference's 1,046.</figcaption>
     </figure>
     <ul class="prose">
@@ -320,7 +359,7 @@
       <li><b>Reciting as words works.</b> Asked for π in English words, Q8_0 stays right for 46 digits ("one four one five nine…"). The smaller models only produced fragments.</li>
     </ul>
     <figure>
-      <div class="plate"><img src="figures/qwen3.8-27b_H2_margins.png" alt="How sure the 27B's Q8_0 is of each of the 1000 digits of π, and for each version the positions where its top choice is wrong."></div>
+      <div class="plate"><img src="figures/qwen3.8-27b_H2_margins.png" alt="How sure the 27B's Q8_0 is of each of the 1000 digits of π, and for each version the positions where its top choice is wrong." width="1170" height="876" loading="lazy" decoding="async"></div>
       <figcaption><b>How to read it.</b> Top: how sure Q8_0 is of each digit of π, as odds against the runner-up on a log scale (1× is a tie, each labelled line is 100 times the one below). Grey is each digit, and the blue line smooths it over 25 digits. Bottom: one row per version from least to most compressed, with a dot wherever its top choice is wrong when fed the true digits. The five rows under the reference have no dots at all, and Q4_K_M's first dot, at 463, sits under one of the grey dips above.</figcaption>
     </figure>
     <div class="table-wrap">
@@ -346,7 +385,7 @@
     <h2>Bigger models take more compression, counted in bits</h2>
     <p class="prose">The same plain ladder, built the same way, on three models. The "cliff" is the build with the most bits whose π recall falls below half of the reference's, and it lands at <b>Q5_K_M (5.9 bits per weight) on the 4B, Q3_K_M (4.1) on the 9B and Q4_K_M (4.9) on the 27B</b>. At Q5_K_M both bigger models still recite π as far as their references, while the 4B is down to 428 digits. The 27B also comes from a newer generation (Qwen 3.8). Size and generation change together.</p>
     <figure>
-      <div class="plate"><img src="figures/H5_model_size.png" alt="Three panels comparing the 4B, 9B and 27B against bits per weight: π digits, noise on π and noise on random digits."></div>
+      <div class="plate"><img src="figures/H5_model_size.png" alt="Three panels comparing the 4B, 9B and 27B against bits per weight: π digits, noise on π and noise on random digits." width="1560" height="1235" loading="lazy" decoding="async"></div>
       <figcaption><b>How to read it.</b> Colour is the model: blue 4B, orange 9B, green 27B. Circles joined by a line are the plain ladder, diamonds are unsloth's files, dashed lines mark each model's reference, and the dotted line at 1,200 is the most the model was allowed to write. Top: π digits against bits per weight. Bottom: noise on π (left) and on random digits (right), log scale, lower is better. The 27B's noise is measured against its Q8_0.</figcaption>
     </figure>
     <div class="table-wrap">
@@ -388,7 +427,7 @@
     <h2>A quick noise test predicts recall, if it is measured on π</h2>
     <p class="prose">Recall costs nine long requests per version and answers in big steps. Noise comes from one teacher-forced pass. It's a smooth number. Across the 61 compressed versions of all three models, more noise on π means fewer digits recited, with a rank correlation of −0.96 within each model, and every tenfold drop in noise buys about 3.2 times as many digits.</p>
     <figure>
-      <div class="plate"><img src="figures/noise_predicts_recall.png" alt="Digits of π recited against noise on π (left) and against noise on random digits (right), for every compressed version of the three models."></div>
+      <div class="plate"><img src="figures/noise_predicts_recall.png" alt="Digits of π recited against noise on π (left) and against noise on random digits (right), for every compressed version of the three models." width="1560" height="624" loading="lazy" decoding="async"></div>
       <figcaption><b>How to read it.</b> Each marker is one compressed version, coloured by model and shaped by how it was built. Up is digits of π and across is noise, both on log scales, so further left is a closer copy of the reference. The left panel measures noise on π and the right panel on random digits. Lines on the left are the fitted relationship, capped at what each model's reference recites. Left, the points line up. Right, they scatter.</figcaption>
     </figure>
     <div class="table-wrap">
@@ -416,7 +455,7 @@
     </dl>
     <p class="prose">Take position 10 on the 4B's BF16, where the right digit gets 0.73 and the runner-up 0.18. At temperature 1 the forecast curve drops by about a quarter there, while a digit the model gives 0.99 barely moves it.</p>
     <figure>
-      <div class="plate"><img src="figures/sampling_forecast.png" alt="Share of samples still correct at each digit of π, forecast and observed, for the 4B and 9B at temperature 1 and at chat settings."></div>
+      <div class="plate"><img src="figures/sampling_forecast.png" alt="Share of samples still correct at each digit of π, forecast and observed, for the 4B and 9B at temperature 1 and at chat settings." width="1560" height="1092" loading="lazy" decoding="async"></div>
       <figcaption><b>How to read it.</b> The 4B is on top and the 9B below, with temperature 1 on the left and chat settings on the right. Each colour is one version, darker for less compression. Up is the share of runs still correct and across is the digit (linear to 10, log beyond). Solid lines are the forecast and dotted lines the share measured over the 64 real runs. Where they overlap, the forecast was right.</figcaption>
     </figure>
     <div class="table-wrap">
@@ -446,11 +485,11 @@
     <h2>unsloth's edge is its imatrix plus more bits on linear attention</h2>
     <p class="prose">unsloth's Q4_K_M of the 4B recites 326 digits of π and a standard Q4_K_M of nearly the same size recites 123. 24 of the 4B's 32 layers use linear attention. Stock llama.cpp stores their parts at the base type, while unsloth keeps <code>ssm_out</code> and <code>attn_qkv</code> at 5 bits and two small gates at 8. I rebuilt their file one change at a time.</p>
     <figure>
-      <div class="plate"><img src="figures/qwen3.5-4b_architecture.png" alt="Qwen 3.5 4B: a stack of 32 layers, three linear-attention layers then one full-attention layer, repeated eight times, with the tensors inside each kind of layer and their share of the weights."></div>
-      <figcaption><b>How to read it.</b> Read bottom up. The left column is the whole model, with linear-attention layers in blue and full-attention layers in orange. The panels open up one layer of each kind, showing every tensor and its share of the weights. The tensors unsloth raises (<code>attn_qkv</code>, <code>ssm_out</code>, <code>ssm_alpha</code>, <code>ssm_beta</code>) all sit in the blue panel. Each part is explained on <a href="guide.html">How the model files were made</a>.</figcaption>
+      <div class="plate"><img src="figures/qwen3.5-4b_architecture.png" alt="Qwen 3.5 4B: a stack of 32 layers, three linear-attention layers then one full-attention layer, repeated eight times, with the tensors inside each kind of layer and their share of the weights." width="1950" height="990" loading="lazy" decoding="async"></div>
+      <figcaption><b>How to read it.</b> Read bottom up. The left column is the whole model, with linear-attention layers in blue and full-attention layers in orange. The panels open up one layer of each kind, showing every tensor and its share of the weights. The tensors unsloth raises (<code>attn_qkv</code>, <code>ssm_out</code>, <code>ssm_alpha</code>, <code>ssm_beta</code>) all sit in the blue panel. Each part is explained on <a href="guide">How the model files were made</a>.</figcaption>
     </figure>
     <figure>
-      <div class="plate"><img src="figures/qwen3.5-4b_recipe.png" alt="Digits of π, noise on π and file size for each step of rebuilding unsloth's Q4_K_M and UD-Q2_K_XL."></div>
+      <div class="plate"><img src="figures/qwen3.5-4b_recipe.png" alt="Digits of π, noise on π and file size for each step of rebuilding unsloth's Q4_K_M and UD-Q2_K_XL." width="1690" height="951" loading="lazy" decoding="async"></div>
       <figcaption><b>How to read it.</b> Q4_K_M builds on top, Q2_K below, one row per build. Yellow crosses are builds with parts set by hand, and the other markers follow the table at the top. Left: digits of π with whiskers from worst to best wording, further right is better. Middle: noise on π, log scale, further left is better. Right: file size.</figcaption>
     </figure>
     <div class="table-wrap">
@@ -484,8 +523,8 @@
     <h2>How it was measured</h2>
     <p class="prose">The setup checks passed for every model, and my Q8_0 and unsloth's Q8_0 of the 4B sit at the same noise from BF16 (0.00013), so the pipeline adds no error of its own. The test prompts, teacher forcing step by step, the settings and the problems found along the way are on their own pages.</p>
     <div class="next-pages">
-      <a href="method.html"><b>How the experiments work</b><span>Every test with a real prompt and answer, and teacher forcing explained with worked examples.</span></a>
-      <a href="guide.html"><b>How the model files were made</b><span>Inside Qwen 3.5, what quantization does to each layer, recipes, and the imatrix.</span></a>
+      <a href="method"><b>How the experiments work</b><span>Every test with a real prompt and answer, and teacher forcing explained with worked examples.</span></a>
+      <a href="guide"><b>How the model files were made</b><span>Inside Qwen 3.5, what quantization does to each layer, recipes, and the imatrix.</span></a>
     </div>
   </section>
 

@@ -5,6 +5,8 @@ usage: build_site.py   (run after analyze.py)
 - docs/guide.html is generated from QUANTIZATION_GUIDE.md, so the two never drift apart.
 - docs/index.html and docs/method.html are edited by hand.
 - Every figure any page references is copied from figures/ into docs/figures/.
+- Search-engine files are generated: canonical links, structured data and image sizes in every page,
+  plus robots.txt, sitemap.xml, llms.txt and 404.html.
 """
 
 import csv
@@ -13,6 +15,7 @@ import json
 import math
 import re
 import shutil
+import struct
 import sys
 
 import pyarrow.parquet as pq
@@ -20,10 +23,17 @@ import pyarrow.parquet as pq
 from common import FIGURES, ROOT, SCORES, TF, load_config, read_jsonl
 
 DOCS = ROOT / "docs"
-REPO = "https://github.com/engineeringthefutureai/bits-of-pi/blob/main/"
-PAGES = {"QUANTIZATION_GUIDE.md": "guide.html"}
-NAV = [("./", "Results"), ("method.html", "How the experiments work"), ("guide.html", "How the model files were made"),
-       ("data.html", "Raw data")]
+SITE = "https://bits-of-pi.engineeringthefuture.ai/"
+GITHUB = "https://github.com/engineeringthefutureai/bits-of-pi"
+REPO = GITHUB + "/blob/main/"
+NAME = "Qwen Digit Recall"
+SHARE_IMAGE = "H5_model_size.png"
+KEYWORDS = ["quantization", "GGUF", "llama.cpp", "Qwen 3.5", "Qwen 3.8", "digits of pi", "memorization",
+            "KL divergence", "teacher forcing", "imatrix", "K-quants", "bits per weight"]
+PAGES = {"QUANTIZATION_GUIDE.md": "guide"}
+# Pages are linked without ".html": GitHub Pages serves method.html at /method.
+NAV = [("./", "Results"), ("method", "How the experiments work"), ("guide", "How the model files were made"),
+       ("data", "Raw data")]
 
 
 def nav(current):
@@ -35,6 +45,7 @@ def nav(current):
 def head(title, description, path):
     """The <head> of index.html with this page's title, description and URL."""
     h = (DOCS / "index.html").read_text().split("<body>")[0]
+    h = re.sub(r"<!-- seo -->.*?<!-- /seo -->\n", "", h, flags=re.S)
     h = re.sub(r"<title>[^<]*</title>", f"<title>{title}</title>", h)
     for key in ('name="description"', 'property="og:description"'):
         h = re.sub(rf'<meta {key} content="[^"]*">', f'<meta {key} content="{description}">', h)
@@ -175,10 +186,10 @@ def md_to_body(md):
 
 def build_guide():
     title, lede, body = md_to_body((ROOT / "QUANTIZATION_GUIDE.md").read_text())
-    page = head("How the Model Files Were Made",
+    page = head(f"How the GGUF Model Files Were Made · {NAME}",
                 "How every Qwen model file in the study was made: the layers inside Qwen 3.5, what "
-                "quantization does to each of them, recipes, and what an imatrix is.", "guide.html")
-    page += ("<body>\n\n<main>\n" + nav("guide.html") +
+                "quantization does to each of them, recipes, and what an imatrix is.", "guide")
+    page += ("<body>\n\n<main>\n" + nav("guide") +
              '  <header style="display:grid; gap:14px;">\n'
              '    <div class="eyebrow">Qwen Digit Recall · background</div>\n'
              f"    <h1>{title}</h1>\n    <p class=\"lede\">{lede}</p>\n  </header>\n\n" + body +
@@ -209,10 +220,10 @@ def error_list(errors, limit=40):
 
 
 def export_data():
-    """docs/data/: the headline table of every model, every scored test answer and per-digit
+    """docs/downloads/: the headline table of every model, every scored test answer and per-digit
     teacher forcing on π, as compact JSON for data.html, plus the headline CSVs for download.
     Model outputs are not included: they live only in the raw run logs, which are not published."""
-    out = DOCS / "data"
+    out = DOCS / "downloads"
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True)
     cfg = load_config()
@@ -259,8 +270,128 @@ def export_data():
     return sorted(f.name for f in out.iterdir())
 
 
+def png_size(path):
+    with open(path, "rb") as f:
+        return struct.unpack(">II", f.read(24)[16:24])
+
+
+def page_url(name):
+    return SITE if name == "index.html" else SITE + name.removesuffix(".html")
+
+
+def structured_data(name, title, description, author, files):
+    """schema.org JSON-LD: the site, plus an article or, for the raw data page, a dataset."""
+    site = {"@type": "WebSite", "@id": SITE + "#site", "name": NAME, "url": SITE}
+    person = {"@type": "Person", "name": author, "url": GITHUB}
+    common = {"name": title, "description": description, "url": page_url(name), "inLanguage": "en",
+              "author": person, "isPartOf": {"@id": SITE + "#site"}, "keywords": ", ".join(KEYWORDS)}
+    if name == "data.html":
+        downloads = [{"@type": "DataDownload", "contentUrl": SITE + "downloads/" + f,
+                      "encodingFormat": "text/csv" if f.endswith(".csv") else "application/json"}
+                     for f in sorted(files)]
+        item = {"@type": "Dataset", **common, "creator": person, "isAccessibleForFree": True,
+                "license": REPO + "LICENSE", "sameAs": GITHUB, "distribution": downloads,
+                "measurementTechnique": "Greedy generation and teacher-forced logit dumps with llama.cpp",
+                "variableMeasured": ["digits of pi, e and square root of 2 recalled", "digits copied correctly",
+                                     "per-digit logit margin", "KL divergence from BF16", "VRAM", "tokens per second"]}
+        del item["author"]
+    else:
+        item = {"@type": "Article" if name == "index.html" else "TechArticle", **common, "headline": title,
+                "image": SITE + "figures/" + SHARE_IMAGE}
+    return json.dumps({"@context": "https://schema.org", "@graph": [site, item]}, ensure_ascii=False, indent=1)
+
+
+def seo(page, files):
+    """Rewrite one page's search-engine block in <head> and give every image its size."""
+    text = page.read_text()
+    text = re.sub(r"<!-- seo -->.*?<!-- /seo -->\n", "", text, flags=re.S)
+    title = html.unescape(re.search(r"<title>([^<]*)</title>", text)[1])
+    description = html.unescape(re.search(r'<meta name="description" content="([^"]*)">', text)[1])
+    author = re.search(r'<meta name="author" content="([^"]*)">', text)[1]
+    w, h = png_size(FIGURES / SHARE_IMAGE)
+    block = (f'<!-- seo -->\n<link rel="canonical" href="{page_url(page.name)}">\n'
+             f'<meta property="og:site_name" content="{NAME}">\n'
+             f'<meta property="og:image:width" content="{w}">\n<meta property="og:image:height" content="{h}">\n'
+             '<meta property="og:image:alt" content="π digits recalled against bits per weight for Qwen 3.5 4B, '
+             '9B and Qwen 3.8 27B">\n'
+             '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
+             '<script type="application/ld+json">\n'
+             + structured_data(page.name, title, description, author, files) + "\n</script>\n<!-- /seo -->\n")
+    text = text.replace("</head>", block + "</head>", 1)
+
+    def sized(m):
+        tag = re.sub(r' (width|height|loading|decoding)="[^"]*"', "", m[0])
+        w, h = png_size(FIGURES / m[1])
+        return tag[:-1] + f' width="{w}" height="{h}" loading="lazy" decoding="async">'
+    page.write_text(re.sub(r'<img src="figures/([^"]+)"[^>]*>', sized, text))
+
+
+def not_found():
+    page = head(f"Page not found · {NAME}", "This page does not exist.", "404")
+    page = page.replace('href="style.css"', 'href="/style.css"').replace(
+        '<meta name="viewport"', '<meta name="robots" content="noindex">\n<meta name="viewport"')
+    links = nav(None).replace('href="', 'href="/').replace('href="/./"', 'href="/"')
+    page += ("<body>\n\n<main>\n" + links +
+             '  <header style="display:grid; gap:14px;">\n'
+             f'    <div class="eyebrow">{NAME}</div>\n    <h1>Page not found</h1>\n'
+             '    <p class="lede">There is nothing at this address. The results, the method, the guide to the model '
+             'files and the raw data are linked above.</p>\n  </header>\n</main>\n</body>\n</html>\n')
+    (DOCS / "404.html").write_text(page)
+
+
+def crawler_files():
+    urls = [SITE + ("" if href == "./" else href) for href, _ in NAV]
+    (DOCS / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {SITE}sitemap.xml\n")
+    (DOCS / "sitemap.xml").write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        + "".join(f"  <url><loc>{u}</loc></url>\n" for u in urls) + "</urlset>\n")
+    raw = GITHUB.replace("github.com", "raw.githubusercontent.com") + "/main/"
+    (DOCS / "llms.txt").write_text(f"""# {NAME}
+
+> How weight quantization changes exact recall in Qwen 3.5 4B, Qwen 3.5 9B and Qwen 3.8 27B. 64 GGUF versions,
+> from BF16 down to about 2 bits per weight, were run through llama.cpp and asked to recite π, e and √2 from
+> memory, copy random digits from the prompt, and choose between prompt and memory when a planted digit
+> disagrees with π. A teacher-forced pass records how sure each version was of every digit.
+
+Main findings:
+
+- Recall of π holds only at high bit widths, then declines. Q4_K_M (4.9 to 5.2 bits per weight) lost part of
+  the first 1,000 digits on all three models. Full recall needed Q5_K_M on the 9B and 27B, and Q8_0 on the 4B.
+- Recall stops on digits the uncompressed model was already least sure of.
+- Copying digits from the prompt survives far more compression than recall does.
+- Counted in bits per weight, bigger models take more compression.
+
+This is a learning project. Claude Code ran the experiments and wrote the reports, and the author chose the
+questions and reviewed the results. The conclusions are notes, not peer-reviewed research.
+
+## Pages
+
+- [Results]({SITE}): verdicts for hypotheses H1 to H6 on each model, with figures
+- [How the experiments work]({SITE}method): the seven tests with real prompts, and teacher forcing explained
+- [How the model files were made]({SITE}guide): Qwen 3.5 layers, quantization types, recipes and imatrix
+- [Raw data]({SITE}data): every version's scores, every scored answer, per-digit certainty for π
+
+## Reports (Markdown)
+
+- [Phase 1, Qwen 3.5 4B]({raw}REPORT.md)
+- [Phase 2, Qwen 3.5 9B]({raw}REPORT_9B.md)
+- [Phase 3, Qwen 3.8 27B and the three-size comparison]({raw}REPORT_27B.md)
+- [Follow-ups]({raw}REPORT_FOLLOWUP.md)
+- [Test plan and hypotheses]({raw}PLAN.md)
+- [Quantization guide]({raw}QUANTIZATION_GUIDE.md)
+
+## Data
+
+- [All versions, headline columns (JSON)]({SITE}downloads/versions.json)
+- Per-model headline tables (CSV): """ + ", ".join(
+            f"[{m}]({SITE}downloads/{m}_headline.csv)" for m in ("qwen3.5-4b", "qwen3.5-9b", "qwen3.8-27b")) + f"""
+- [Source code and scored data]({GITHUB})
+""")
+
+
 def main():
     build_guide()
+    not_found()
     files = export_data()
     pages = sorted(DOCS.glob("*.html"))
     wanted = sorted({f for p in pages for f in re.findall(r'src="figures/([^"]+)"', p.read_text())})
@@ -272,6 +403,11 @@ def main():
     out.mkdir(parents=True)
     for f in wanted:
         shutil.copy2(FIGURES / f, out / f)
+    data_files = [p.name for p in (DOCS / "downloads").iterdir()]
+    for page in sorted(DOCS.glob("*.html")):
+        if page.name != "404.html":
+            seo(page, data_files)
+    crawler_files()
     (DOCS / ".nojekyll").touch()
     print(f"docs/: guide.html generated, {len(pages)} pages, {len(wanted)} figures copied, "
           f"{len(files)} data files")
