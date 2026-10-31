@@ -231,6 +231,25 @@ over the 4B (10 to 19 times less noise) doesn't grow again at 27B.
 bit removed, against 26 times for the 9B and 13 for the 4B. It also recites the most π of the three
 at Q3_K_M (271) and Q2_K (58).
 
+**Teacher forcing shows the same order without the noise of free recall.** Fed the true digits,
+how many of π's first 1,000 does each version get wrong, its top choice not being the real digit?
+This counts against π itself, so every reference scores 0 and the 27B's Q8_0 reference doesn't
+skew it.
+
+| Plain ladder | 4B | 9B | 27B |
+|---|---|---|---|
+| Q6_K | 2 | 0 | 0 |
+| Q5_K_M | 2 | 0 | 0 |
+| Q4_K_M | 14 | 2 | 3 |
+| Q3_K_M | 104 | 38 | **15** |
+| Q2_K | 882 | 903 | **170** |
+
+The 4B goes wrong first, already at Q6_K, and has 5 to 7 times the bigger models' count at Q4_K_M
+and Q3_K_M. The 9B and 27B are level down to Q4_K_M. Below that the 27B degrades slowest: a third
+of the 9B's wrong digits at Q3_K_M, and at Q2_K it still gets about 83% of digits right while the
+two smaller models get about 10%. Free recall hides this, because it stops at the first wrong
+digit. The 27B's Q4_K_M has only 3, but one sits at position 463.
+
 **Where the cliff falls depends on where the uncertain digits sit, as well as on the noise.** The
 27B's Q4_K_M has about the 9B's noise on π (0.0070 against 0.0058), yet it first goes wrong at
 position 463, where Q8_0 was only 18 times surer of the right digit. The 9B's Q4_K_M gets past its

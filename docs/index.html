@@ -71,7 +71,7 @@
           <tr><td>H2 · Errors start where the model was least sure</td><td><span class="verdict v-yes">Confirmed</span></td><td><span class="verdict v-yes">Confirmed</span></td><td><span class="verdict v-yes">Confirmed</span></td><td>Recall stops on uncertain digits: the 12th (4B), 6th (9B) and 2nd (27B) percentile of the reference's certainty</td></tr>
           <tr><td>H3 · Copying holds up, and fails by skipping digits in runs</td><td><span class="verdict v-yes">Confirmed</span></td><td><span class="verdict v-yes">Confirmed</span></td><td><span class="verdict v-yes">Confirmed</span></td><td>Copying is near perfect down to 4.3 bpw (4B), 3.4 (9B) and 2.9 (27B, even plain Q2_K). Errors are missing digits inside runs, even in the reference</td></tr>
           <tr><td>H4 · The compression scheme matters at equal size</td><td><span class="verdict v-yes">Confirmed</span></td><td><span class="verdict v-yes">Confirmed</span></td><td><span class="verdict v-yes">Confirmed</span></td><td>K-quants beat Q4_0. unsloth's recipe beats standard builds (on the 27B from 4 bits down). A number-free imatrix doesn't protect π</td></tr>
-          <tr><td>H5 · Bigger models survive more compression</td><td colspan="3"><span class="verdict v-yes">Confirmed per bit</span></td><td>At Q5_K_M the 9B and 27B keep their full π recall while the 4B keeps 428 of 1,000. The 27B leads below 4 bits but breaks one step before the 9B at Q4_K_M</td></tr>
+          <tr><td>H5 · Bigger models survive more compression</td><td colspan="3"><span class="verdict v-yes">Confirmed per bit</span></td><td>At Q5_K_M the 9B and 27B keep their full π recall while the 4B keeps 428 of 1,000. Fed the true digits, the 4B's Q3_K_M gets 104 of 1,000 wrong, the 9B's 38 and the 27B's 15. The 27B leads below 4 bits but breaks one step before the 9B in free recall</td></tr>
           <tr><td>H6 · Compressed models fall back on memory over the prompt</td><td><span class="verdict v-no">Reversed</span></td><td><span class="verdict v-open">No conflict</span></td><td><span class="verdict v-open">No conflict</span></td><td>Compressed 4B builds copy a planted digit <em>more</em> faithfully. The 9B and 27B copy it in every build that can copy</td></tr>
         </tbody>
       </table>
@@ -360,6 +360,19 @@
           <tr><td>Q4_K_M</td><td class="r">123</td><td class="r">0.039</td><td class="r">788</td><td class="r">0.0058</td><td class="r"><b>463</b></td><td class="r">0.0070</td></tr>
           <tr><td>Q3_K_M</td><td class="r">88</td><td class="r">0.35</td><td class="r"><b>129</b></td><td class="r">0.13</td><td class="r">271</td><td class="r">0.037</td></tr>
           <tr><td>Q2_K</td><td class="r">0</td><td class="r">2.30</td><td class="r">0</td><td class="r">2.39</td><td class="r">58</td><td class="r">0.60</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose"><b>Teacher forcing shows the order most clearly.</b> Fed the true digits, how many of π's first 1,000 does each version get wrong? It counts against π itself, so every reference scores 0. The 4B goes wrong first. The 9B and 27B are level down to Q4_K_M, and below that the 27B degrades slowest.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Plain ladder</th><th class="r">4B wrong digits</th><th class="r">9B wrong digits</th><th class="r">27B wrong digits</th></tr></thead>
+        <tbody>
+          <tr><td>Q6_K</td><td class="r">2</td><td class="r">0</td><td class="r">0</td></tr>
+          <tr><td>Q5_K_M</td><td class="r">2</td><td class="r">0</td><td class="r">0</td></tr>
+          <tr><td>Q4_K_M</td><td class="r">14</td><td class="r">2</td><td class="r">3</td></tr>
+          <tr><td>Q3_K_M</td><td class="r">104</td><td class="r">38</td><td class="r"><b>15</b></td></tr>
+          <tr><td>Q2_K</td><td class="r">882</td><td class="r">903</td><td class="r"><b>170</b></td></tr>
         </tbody>
       </table>
     </div>
