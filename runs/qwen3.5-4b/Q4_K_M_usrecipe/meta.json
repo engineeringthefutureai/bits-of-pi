@@ -1,0 +1,16 @@
+{
+ "model": "qwen3.5-4b",
+ "variant": "Q4_K_M_usrecipe",
+ "group": "recipe",
+ "source": "quantize",
+ "file_size": 2740937632,
+ "n_params": 4205751296,
+ "bpw": 5.214,
+ "sha256": "4efa7bf678c8cb7eb1920fc39ee3537f768bffc35f7aae027f594a71c1eca566",
+ "llama_cpp_commit": "bed0a856606ee4a24a164066f73d2379447033f5",
+ "backend": "sycl",
+ "quant_type": "Q4_K_M",
+ "imatrix": "none",
+ "recipe_from": "Qwen3.5-4B-Q4_K_M.gguf",
+ "tensor_types": []
+}

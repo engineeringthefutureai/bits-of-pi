@@ -1,0 +1,19 @@
+{
+ "model": "qwen3.5-4b",
+ "variant": "Q2_K_ssm",
+ "group": "recipe",
+ "source": "quantize",
+ "file_size": 2008798112,
+ "n_params": 4205751296,
+ "bpw": 3.821,
+ "sha256": "8dba875c336d02a37371c810aa2855fea8f89bf514652c46779865ad9f87c900",
+ "llama_cpp_commit": "bed0a856606ee4a24a164066f73d2379447033f5",
+ "backend": "sycl",
+ "quant_type": "Q2_K",
+ "imatrix": "none",
+ "tensor_types": [
+  "ssm_out=q5_k",
+  "ssm_alpha=q8_0",
+  "ssm_beta=q8_0"
+ ]
+}

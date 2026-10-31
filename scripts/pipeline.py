@@ -19,6 +19,7 @@ import datetime as dt
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -27,7 +28,7 @@ from huggingface_hub import hf_hub_download
 import e0
 import run_gen
 import run_tf
-from common import (DATA, GEN_EXPS, INPUTS, MODELS, RUNS, TF, ResourceSampler, backend_env, bin_path,
+from common import (DATA, GEN_EXPS, INPUTS, MODELS, ROOT, RUNS, TF, ResourceSampler, backend_env, bin_path,
                     load_config, model_n_params, read_jsonl, use_mmap)
 
 
@@ -97,6 +98,21 @@ def imatrix_file(cfg, model, kind, device):
     return path
 
 
+def recipe_overrides(mcfg, model, filename):
+    """One anchored `name=type` override per tensor of a published GGUF, F16/BF16 included, so a
+    tensor its maker left unquantized stays that way. F32 is skipped: llama-quantize never touches
+    those (norms, ssm_conv1d). The file is downloaded for its header if needed, then deleted again."""
+    sys.path.insert(0, str(ROOT / "llama.cpp" / "gguf-py"))
+    from gguf import GGMLQuantizationType, GGUFReader
+    fetched = not (MODELS / model / "hf" / filename).exists()
+    path = hf_file(mcfg, model, filename)
+    out = [f"^{re.escape(t.name)}$={t.tensor_type.name.lower()}"
+           for t in GGUFReader(str(path)).tensors if t.tensor_type != GGMLQuantizationType.F32]
+    if fetched:
+        os.remove(path)
+    return out
+
+
 def ensure_file(cfg, model, v, device):
     mcfg = cfg["models"][model]
     if v["source"] == "hf":
@@ -108,8 +124,19 @@ def ensure_file(cfg, model, v, device):
         im = imatrix_file(cfg, model, v["imatrix"], device)
         cmd += ["--imatrix", str(im)]
         info["imatrix_sha256"] = sha256(im)
+    if "recipe_from" in v:
+        info["recipe_from"] = v["recipe_from"]
+    if v.get("tensor_types") or "recipe_from" in v:
+        info["tensor_types"] = v.get("tensor_types", [])
     if not out.exists():
         out.parent.mkdir(parents=True, exist_ok=True)
+        overrides = list(v.get("tensor_types", []))
+        if "recipe_from" in v:   # copy every tensor's type from a published file
+            overrides += recipe_overrides(mcfg, model, v["recipe_from"])
+        if overrides:
+            types = out.with_suffix(".types")
+            types.write_text("\n".join(overrides) + "\n")
+            cmd += ["--tensor-type-file", str(types)]
         tmp = out.with_suffix(".tmp")
         log(f"[{v['name']}] quantizing {v['type']}")
         subprocess.run(cmd + [str(quant_source_file(cfg, model)), str(tmp), v["type"]],

@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How the Model Files Were Made</title>
+<meta name="description" content="How every Qwen model file in the study was made: the layers inside Qwen 3.5, what quantization does to each of them, recipes, and what an imatrix is.">
+<meta name="author" content="Kiryl Dubarenka">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How the Model Files Were Made">
+<meta property="og:description" content="How every Qwen model file in the study was made: the layers inside Qwen 3.5, what quantization does to each of them, recipes, and what an imatrix is.">
+<meta property="og:url" content="https://bits-of-pi.engineeringthefuture.ai/guide.html">
+<meta property="og:image" content="https://bits-of-pi.engineeringthefuture.ai/figures/H5_model_size.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232a78d6'/%3E%3Ctext x='32' y='46' font-family='Georgia,serif' font-size='44' text-anchor='middle' fill='white'%3E%CF%80%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<main>
+  <nav class="site-nav" aria-label="Pages"><a href="./">Results</a><a href="method.html">How the experiments work</a><a href="guide.html" aria-current="page">How the model files were made</a></nav>
+  <header style="display:grid; gap:14px;">
+    <div class="eyebrow">Qwen Digit Recall · background</div>
+    <h1>How the model files were made</h1>
+    <p class="lede">This guide describes how every model file in this study was produced: the structure of the models, what quantization does to each part of them, how the formats and recipes differ, what an imatrix is and why one can be moved between files. It assumes some familiarity with neural networks and none with quantization. The results are in the reports: <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/REPORT.md">Phase 1</a>, <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/REPORT_9B.md">Phase 2</a>, <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/REPORT_27B.md">Phase 3</a> and <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/REPORT_FOLLOWUP.md">the follow-ups</a>.</p>
+  </header>
+
+  <section>
+    <h2 id="scope-qwen-models-only">Scope: Qwen models only</h2>
+    <p class="prose">Every measurement here comes from three Qwen models: Qwen 3.5 4B, Qwen 3.5 9B and Qwen 3.8 27B. They were chosen because they are among the most popular open models for self-hosting, and their quantized versions are what people actually run on consumer graphics cards with llama.cpp and the tools built on it.</p>
+    <p class="prose">The general mechanisms below (rounding, block scales, imatrix weighting) work the same way for any model llama.cpp supports. The specific findings may not carry over. Qwen 3.5 uses a hybrid layer design that most other model families don't share, and the recipe results in the follow-up (which tensors deserve extra bits) are tied to that design. How many digits of π a model has memorized, and how sure it is of each, depends on its training too.</p>
+  </section>
+
+  <section>
+    <h2 id="inside-the-models">Inside the models</h2>
+    <h3 id="layers">Layers</h3>
+    <p class="prose">Qwen 3.5 4B and 9B are both stacks of 32 layers. Text enters as tokens, each token is looked up in an <b>embedding table</b> to become a vector (2,560 numbers wide on the 4B, 4,096 on the 9B), and that vector passes through every layer in turn. At the end it is compared against the vocabulary to give a probability for each possible next token.</p>
+    <p class="prose">Each layer has two halves:</p>
+    <ol class="prose"><li>A <b>token mixer</b>, which lets each position read information from earlier positions. Qwen 3.5 uses two kinds:<ul class="prose"><li><b>Full attention</b> (every 4th layer, 8 of the 32). Each position compares itself with every earlier one and pulls in what's relevant, which costs memory that grows with the length of the text (the KV cache). The 4B uses 16 query heads sharing 4 key/value heads.</li><li><b>Linear attention</b>, specifically Gated DeltaNet (the other 24 layers). Instead of looking back at every earlier position, it keeps a fixed-size running state and updates it at each token, deciding how much of the old state to keep and how strongly to write the new token in. It's much cheaper on long texts. llama.cpp files its tensors under <code>ssm_*</code> names, after the state-space models it resembles.</li></ul></li><li>A <b>feed-forward network</b> that transforms each position on its own (a SwiGLU block of three matrices).</li></ol>
+    <p class="prose">Small <b>normalization</b> steps sit between the parts and keep the numbers in a stable range.</p>
+    <figure>
+      <div class="plate"><img src="figures/qwen3.5-4b_architecture.png" alt="The 32-layer stack of Qwen 3.5 4B, and the tensors inside a linear-attention layer and a full-attention layer"></div>
+      <figcaption><b>How to read it.</b> Read everything bottom up. The left column is the whole model. Tokens enter through <code>token_embd</code>, pass the 32 layers and leave through <code>output</code>, which on the 4B reuses the embedding table, while the bars show the fixed pattern of three linear-attention layers (blue) and one full-attention layer (orange). The two panels open up one layer of each kind. Each box is a tensor, coloured by its part and labelled with its share of the model's weights. Dotted lines are skip connections. Each half adds its result to the running vector at the + circles. Both kinds of layer end in the same feed-forward block, and it holds over half of all the weights.</figcaption>
+    </figure>
+    <h3 id="tensors">Tensors</h3>
+    <p class="prose">Each of those pieces is stored as one or more named weight matrices, or <b>tensors</b>, under the names llama.cpp uses in the files and in the per-tensor overrides further down. The shares are for the 4B, which has 4.2 billion weights in all.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Tensor</th><th>Part</th><th>Layers</th><th>Share of weights</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>ffn_gate</code>, <code>ffn_up</code>, <code>ffn_down</code></td><td>feed-forward</td><td>all 32</td><td>54%</td><td>the three SwiGLU matrices</td></tr>
+          <tr><td><code>token_embd</code></td><td>embedding</td><td>once</td><td>15%</td><td>token → vector, and on the 4B also vector → token at the output</td></tr>
+          <tr><td><code>attn_qkv</code></td><td>linear attention</td><td>24</td><td>12%</td><td>one fused projection producing the query, key and value</td></tr>
+          <tr><td><code>attn_gate</code></td><td>linear attention</td><td>24</td><td>6%</td><td>gate on the layer's output</td></tr>
+          <tr><td><code>ssm_out</code></td><td>linear attention</td><td>24</td><td>6%</td><td>projects the layer's result back into the main vector</td></tr>
+          <tr><td><code>attn_q</code>, <code>attn_k</code>, <code>attn_v</code>, <code>attn_output</code></td><td>full attention</td><td>8</td><td>7%</td><td>the classic attention projections</td></tr>
+          <tr><td><code>ssm_alpha</code>, <code>ssm_beta</code></td><td>linear attention</td><td>24</td><td>0.1%</td><td>per-token decay (how much state to keep) and write strength</td></tr>
+          <tr><td><code>ssm_conv1d</code>, <code>ssm_a</code>, <code>ssm_dt</code>, all <code>*_norm</code></td><td>various</td><td>various</td><td>under 0.1%</td><td>short convolution, state constants, normalization</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">The 4B uses the same table for input and output ("tied embeddings"). The 9B keeps a separate <code>output</code> matrix. The 27B (Qwen 3.8) follows the same design at larger size and also ships one extra layer for predicting several tokens at once (<code>blk.64</code>), which llama.cpp doesn't use.</p>
+    <p class="prose">The tiny tensors in the last row stay at 32-bit precision in every file. Everything else is a candidate for quantization.</p>
+  </section>
+
+  <section>
+    <h2 id="quantization">Quantization</h2>
+    <h3 id="rounding-to-fewer-bits">Rounding to fewer bits</h3>
+    <p class="prose">The released model stores each weight as a 16-bit number (<b>BF16</b>): 8.4 GB for the 4B and 54.7 GB for the 27B. <b>Quantization</b> stores each weight in fewer bits by rounding it to one of a small set of levels. At 4 bits there are 16 levels, and the file shrinks to roughly a quarter.</p>
+    <p class="prose">Every rounded weight is slightly wrong. One error is negligible, but each token passes through billions of multiply-adds, and the errors shift the model's output probabilities a little. That doesn't matter when the right next token is far ahead. It matters when two candidates are nearly tied, which is exactly the case this study probes with digits of π.</p>
+    <h3 id="blocks-and-scales">Blocks and scales</h3>
+    <p class="prose">The levels aren't fixed for a whole tensor. Weights are cut into <b>blocks</b> of 32, and each block stores its own <b>scale</b> (and in some formats an offset) at higher precision. A block of small weights gets finely spaced levels, a block with an outlier gets coarser ones. The <b>K-quants</b> group blocks into super-blocks of 256 and compress the block scales too, which buys accuracy at the same size. The scales take space, so a "4-bit" format costs about 4.5 bits per weight.</p>
+    <h3 id="formats">Formats</h3>
+    <p class="prose">All files are <b>GGUF</b>, the format llama.cpp reads.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>What it means</th></tr></thead>
+        <tbody>
+          <tr><td><b>BF16</b></td><td>The original weights, unrounded.</td></tr>
+          <tr><td><b>Q8_0</b></td><td>8-bit levels in blocks of 32, one scale per block, about 8.5 bits per weight. In this study it gave the same answers as BF16.</td></tr>
+          <tr><td><b>Q4_0</b></td><td>The older ("legacy") 4-bit format, one scale per block of 32.</td></tr>
+          <tr><td><b>Q6_K, Q5_K, Q4_K, Q3_K, Q2_K</b></td><td>K-quant formats at roughly 6 to 2 bits per weight.</td></tr>
+          <tr><td><b>Q4_K_M, Q3_K_M, …</b></td><td>A file-level preset. <b>_S, _M, _L, _XL</b> name how many tensors get raised above the base K-quant. A Q4_K_M file mixes Q4_K and Q6_K tensors (see below).</td></tr>
+          <tr><td><b>IQ4_XS, IQ3_XXS, IQ2_XS, IQ2_XXS</b></td><td><b>I-quants.</b> Weights are encoded in groups against a lookup table of good patterns, which beats K-quants at the same size. They decode slowly on the SYCL backend used here.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose"><b>Bits per weight (bpw)</b> in the reports is measured, not read off the name: file size × 8 ÷ number of weights. That includes the scales and the tensors kept at higher precision, so a 4B Q4_K_M measures 5.15 bpw.</p>
+    <h3 id="recipes">Recipes</h3>
+    <p class="prose">A file-level name like Q4_K_M is really a <b>recipe</b>: a type for every tensor. llama.cpp's built-in recipes raise the precision of tensors known to be sensitive, and anyone can override any tensor by name. Here is what three files of the 4B actually contain, read from the files themselves:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Tensor</th><th>Standard Q4_K_M</th><th>unsloth Q4_K_M</th><th>Standard Q2_K</th></tr></thead>
+        <tbody>
+          <tr><td><code>ffn_gate</code>, <code>ffn_up</code></td><td>Q4_K</td><td>Q4_K</td><td>Q2_K</td></tr>
+          <tr><td><code>ffn_down</code></td><td>half Q6_K, half Q4_K</td><td>half Q6_K, half Q4_K</td><td>Q3_K</td></tr>
+          <tr><td><code>token_embd</code></td><td>Q6_K</td><td>Q6_K</td><td>Q6_K</td></tr>
+          <tr><td><code>attn_qkv</code> (linear)</td><td>half Q6_K, half Q4_K</td><td><b>Q5_K</b></td><td>Q4_K</td></tr>
+          <tr><td><code>attn_gate</code> (linear)</td><td>Q4_K</td><td>Q4_K</td><td>Q2_K</td></tr>
+          <tr><td><code>ssm_out</code> (linear)</td><td>Q4_K</td><td><b>Q5_K</b></td><td>Q2_K</td></tr>
+          <tr><td><code>ssm_alpha</code>, <code>ssm_beta</code> (linear)</td><td>Q4_K</td><td><b>Q8_0</b></td><td>Q2_K</td></tr>
+          <tr><td><code>attn_q</code>, <code>attn_k</code>, <code>attn_output</code> (full)</td><td>Q4_K</td><td>Q4_K</td><td>Q2_K–Q3_K</td></tr>
+          <tr><td><code>attn_v</code> (full)</td><td>half Q6_K, half Q4_K</td><td>5 of 8 Q6_K</td><td>Q4_K</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">The standard recipe was written for ordinary attention layers and treats Qwen 3.5's linear-attention tensors by the same rules. unsloth's recipe gives them more bits, for a file only 30 MiB larger. The follow-up report tests each of those changes on its own.</p>
+  </section>
+
+  <section>
+    <h2 id="the-imatrix">The imatrix</h2>
+    <h3 id="what-it-records">What it records</h3>
+    <p class="prose">Within a weight matrix the input channels don't all carry the same signal, and on real text some are large while others sit near zero almost all the time. A rounding error on a weight that multiplies a large input does far more damage than one on a weight whose input is usually quiet.</p>
+    <p class="prose">An <b>imatrix</b> (importance matrix) measures this. llama.cpp runs the full-precision model over a <b>calibration text</b> and, for every weight matrix, accumulates the average squared activation of each input channel. The result is one vector per matrix: 248 of them for the 4B, in a 3.6 MB file.</p>
+    <h3 id="what-it-changes">What it changes</h3>
+    <p class="prose">When the quantizer picks each block's scale, it normally minimizes the plain squared rounding error, treating every weight alike. With an imatrix it minimizes the error weighted by input importance, accepting larger errors where inputs are quiet in exchange for smaller ones where they are loud. <b>File size, formats and recipe stay exactly the same,</b> and only the choice of levels changes. The smallest I-quants can't be built at all without one.</p>
+    <h3 id="the-calibration-text-sets-the-priorities">The calibration text sets the priorities</h3>
+    <p class="prose">An imatrix protects whatever its calibration text exercises. If the text has no digits, the channels that light up on digits look unimportant and get no protection. My imatrix was built that way on purpose, from Wikipedia text with every number removed, to test whether an imatrix tuned on ordinary prose protects memorized digits. It doesn't (H4 in <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/REPORT.md#h4-format-imatrix-and-recipe">the Phase 1 report</a>).</p>
+    <h3 id="why-an-imatrix-can-be-moved-between-files">Why an imatrix can be moved between files</h3>
+    <p class="prose">An imatrix is a property of the full-precision model and the calibration text, stored per tensor name, with nothing in it about formats or recipes. One imatrix therefore serves every quantized file of the same model: mine built Q4_K_M_imat, Q2_K_imat and IQ3_XXS alike.</p>
+    <p class="prose">For the same reason, an imatrix made by someone else can be used, provided it comes from the same model with the same tensor names and shapes. unsloth publishes theirs. That made it possible to build files that combine <b>the standard recipe with their imatrix</b>, or <b>their recipe with my imatrix</b>, and so separate what each ingredient contributes.</p>
+    <p class="prose">It doesn't carry across models. The 9B's tensors have different shapes from the 4B's, and a fine-tuned model's activations have moved enough to need a fresh imatrix.</p>
+  </section>
+
+  <section>
+    <h2 id="the-files-in-this-study">The files in this study</h2>
+    <p class="prose">Each model has one <b>reference</b> that everything is compared against: BF16 for the 4B and 9B, and unsloth's Q8_0 for the 27B, whose BF16 doesn't fit on two 24 GB cards.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Group</th><th>Example names</th><th>How it was made</th></tr></thead>
+        <tbody>
+          <tr><td><b>Plain ladder</b> (my builds, no imatrix)</td><td>Q8_0, Q6_K, Q5_K_M, Q4_K_M, Q3_K_M, Q2_K</td><td>llama.cpp's built-in recipe and nothing else. Only the bit width changes from step to step.</td></tr>
+          <tr><td><b>My imatrix</b></td><td>Q4_K_M_imat, Q3_K_M_imat, Q2_K_imat, IQ4_XS, IQ3_XXS, IQ2_XS</td><td>Built-in recipe, rounded with my number-free imatrix.</td></tr>
+          <tr><td><b>unsloth's imatrix</b></td><td>Q4_K_M_usimat, Q3_K_M_usimat</td><td>Built-in recipe, rounded with unsloth's published imatrix.</td></tr>
+          <tr><td><b>unsloth's files</b></td><td>us_Q4_K_M, us_UD-Q4_K_XL, …</td><td>Downloaded as published. <b>UD-</b> ("Unsloth Dynamic") files use unsloth's own per-tensor recipe.</td></tr>
+          <tr><td><b>Legacy</b></td><td>Q4_0, us_Q4_0</td><td>The older 4-bit format, for comparison with K-quants.</td></tr>
+          <tr><td><b>Recipe experiments</b> (4B follow-up)</td><td>Q4_K_M_usimat_ssmout, Q4_K_M_usrecipe_usimat, Q2_K_imat_ssm, …</td><td>My builds with chosen tensors overridden, or with every tensor's type copied from an unsloth file.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2 id="how-my-own-files-were-built">How my own files were built</h2>
+    <p class="prose">All builds used llama.cpp at commit <code>bed0a8566</code>, and each one takes two or three steps.</p>
+    <p class="prose"><b>1. Source.</b> Every DIY file was quantized from unsloth's BF16 GGUF of the model. For the 27B, which can't be loaded on this hardware, the BF16 file was only read from disk while quantizing.</p>
+    <p class="prose"><b>2. Imatrix (only for _imat builds).</b> The calibration text is the training split of WikiText-2, a standard Wikipedia corpus. <code>scripts/make_inputs.py</code> keeps the first 600,000 characters of lines with no run of three or more digits and no decimal number, and asserts that no stretch of π, e or √2 survives. Its SHA-256 is in <code>data/calibration.sha256</code>. Then:</p>
+    <pre class="prompt">llama-imatrix -m &lt;reference&gt;.gguf -f data/calibration.txt -o imatrix.gguf --chunks 200 -c 512</pre>
+    <p class="prose">That's 200 windows of 512 tokens, about 100,000 tokens. The imatrix was computed on BF16 for the 4B and 9B and on Q8_0 for the 27B. Q8_0 is close enough to BF16 that the importance values barely move.</p>
+    <p class="prose"><b>3. Quantize.</b></p>
+    <pre class="prompt">llama-quantize [--imatrix imatrix.gguf] [--tensor-type-file recipe.types] &lt;BF16&gt;.gguf out.gguf Q4_K_M</pre>
+    <p class="prose">The last argument picks the preset and its built-in recipe. <code>--imatrix</code> adds weighted rounding. <code>--tensor-type-file</code> overrides chosen tensors, one line each, such as <code>^blk\.3\.ssm_out\.weight$=q5_k</code>. The settings for every version live in <code>config.yaml</code>, and <code>scripts/pipeline.py</code> runs the commands.</p>
+    <h3 id="copying-a-recipe-from-a-published-file">Copying a recipe from a published file</h3>
+    <p class="prose">A GGUF file records the type of every tensor it contains, so a published recipe can be read straight out of the file. <code>recipe_overrides()</code> in <code>scripts/pipeline.py</code> opens unsloth's file with llama.cpp's own GGUF reader and writes one override line per quantized tensor. Fed to <code>llama-quantize</code> together with unsloth's imatrix, it rebuilt their Q4_K_M and UD-Q2_K_XL exactly. The rebuilt files recite π identically, get the same digits wrong under teacher forcing, and match the published files' noise.</p>
+    <h3 id="checking-the-pipeline">Checking the pipeline</h3>
+    <p class="prose">My Q8_0 of the 4B and unsloth's Q8_0 sit at the same noise (KL divergence) from BF16, 0.000133 and 0.000131. The pipeline adds no error of its own. Differences between files at lower bit widths come from how they were quantized.</p>
+  </section>
+
+  <section>
+    <h2 id="where-to-look">Where to look</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>What</th><th>Where</th></tr></thead>
+        <tbody>
+          <tr><td>Every version, its source, preset, imatrix and overrides</td><td><code>config.yaml</code></td></tr>
+          <tr><td>The calibration text</td><td><code>scripts/make_inputs.py</code> (<code>make_calibration</code>)</td></tr>
+          <tr><td>Download, imatrix, quantize and recipe copying</td><td><code>scripts/pipeline.py</code> (<code>imatrix_file</code>, <code>ensure_file</code>, <code>recipe_overrides</code>)</td></tr>
+          <tr><td>Test plan and the comparisons the builds were designed for</td><td><a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/PLAN.md">PLAN.md</a></td></tr>
+          <tr><td>Results</td><td><a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/REPORT.md">REPORT.md</a>, <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/REPORT_9B.md">REPORT_9B.md</a>, <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/REPORT_27B.md">REPORT_27B.md</a>, <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/REPORT_FOLLOWUP.md">REPORT_FOLLOWUP.md</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <p>Generated from <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/QUANTIZATION_GUIDE.md">QUANTIZATION_GUIDE.md</a> · <a href="https://github.com/engineeringthefutureai/bits-of-pi">github.com/engineeringthefutureai/bits-of-pi</a></p>
+    <p>Code under the MIT License.</p>
+  </footer>
+</main>
+</body>
+</html>

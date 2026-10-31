@@ -83,6 +83,30 @@ models:
       - {name: us_UD-IQ3_XXS,  group: unsloth, source: hf, file: Qwen3.5-4B-UD-IQ3_XXS.gguf}
       - {name: us_UD-IQ2_XXS,  group: unsloth, source: hf, file: Qwen3.5-4B-UD-IQ2_XXS.gguf}
 
+      # Follow-up R: which per-tensor choices make unsloth's recipe win (H4). Stock llama.cpp gives
+      # the linear-attention tensors (ssm_*, attn_qkv) the base type; unsloth raises them.
+      # tensor_types are --tensor-type overrides; recipe_from copies every tensor type of that file.
+      - {name: Q4_K_M_usimat_ssmout, group: recipe, source: quantize, type: Q4_K_M, imatrix: unsloth,
+         tensor_types: [ssm_out=q5_k]}
+      - {name: Q4_K_M_usimat_ssmab,  group: recipe, source: quantize, type: Q4_K_M, imatrix: unsloth,
+         tensor_types: [ssm_alpha=q8_0, ssm_beta=q8_0]}
+      - {name: Q4_K_M_usimat_qkv,    group: recipe, source: quantize, type: Q4_K_M, imatrix: unsloth,
+         tensor_types: [attn_qkv=q5_k]}
+      - {name: Q4_K_M_usrecipe,        group: recipe, source: quantize, type: Q4_K_M,
+         recipe_from: Qwen3.5-4B-Q4_K_M.gguf}
+      - {name: Q4_K_M_usrecipe_imat,   group: recipe, source: quantize, type: Q4_K_M, imatrix: own,
+         recipe_from: Qwen3.5-4B-Q4_K_M.gguf}
+      - {name: Q4_K_M_usrecipe_usimat, group: recipe, source: quantize, type: Q4_K_M, imatrix: unsloth,
+         recipe_from: Qwen3.5-4B-Q4_K_M.gguf}
+      - {name: Q2_K_ssm,       group: recipe, source: quantize, type: Q2_K,
+         tensor_types: [ssm_out=q5_k, ssm_alpha=q8_0, ssm_beta=q8_0]}
+      - {name: Q2_K_imat_ssm,  group: recipe, source: quantize, type: Q2_K, imatrix: own,
+         tensor_types: [ssm_out=q5_k, ssm_alpha=q8_0, ssm_beta=q8_0]}
+      - {name: Q2_K_usrecipe_imat,   group: recipe, source: quantize, type: Q2_K, imatrix: own,
+         recipe_from: Qwen3.5-4B-UD-Q2_K_XL.gguf}
+      - {name: Q2_K_usrecipe_usimat, group: recipe, source: quantize, type: Q2_K, imatrix: unsloth,
+         recipe_from: Qwen3.5-4B-UD-Q2_K_XL.gguf}
+
   # Phase 2: unsloth files plus a plain no-imatrix ladder for the size comparison (H5).
   # The imatrix/recipe breakdown (H4) was answered on the 4B and is not repeated.
   qwen3.5-9b:
@@ -91,6 +115,8 @@ models:
     unsloth_imatrix: imatrix_unsloth.gguf_file
     skip_exps: [E4]                 # superseded by E4b (see PLAN.md)
     e0_variants: [BF16, us_Q8_0]    # no DIY Q8_0 in this set
+    # added for follow-up S: the 18 GB BF16 mmapped next to another job ran the host out of memory
+    mmap: false
     variants:
       - {name: BF16,           group: reference, source: hf, file: Qwen3.5-9B-BF16.gguf}
 
@@ -151,3 +177,17 @@ models:
       - {name: us_UD-IQ3_XXS,  group: unsloth, source: hf, file: Qwen3.8-27B-UD-IQ3_XXS.gguf}
       - {name: us_UD-Q2_K_XL,  group: unsloth, source: hf, file: Qwen3.8-27B-UD-Q2_K_XL.gguf}
       - {name: us_UD-IQ2_XXS,  group: unsloth, source: hf, file: Qwen3.8-27B-UD-IQ2_XXS.gguf}
+
+# Follow-up S: does the per-digit certainty from the teacher-forced pass predict sampled recitations?
+# Prompt is the E2 π text's header, so each sample sees exactly the context the certainty was read in.
+# llama.cpp applies top-k, then top-p, then temperature; the forecast in analyze.py does the same.
+sampling:
+  n: 64                            # samples per variant and setting, seeds 1..n
+  parallel: 8                      # server slots
+  settings:
+    t1:   {temperature: 1.0, top_k: 0,  top_p: 1.0}    # plain sampling, no cut-offs
+    chat: {temperature: 0.7, top_k: 20, top_p: 0.8}    # typical chat-app settings
+  top_n: 32                        # candidates kept per digit position for the forecast
+  variants:
+    qwen3.5-4b: [BF16, Q8_0, Q6_K, Q5_K_M, Q4_K_M, Q3_K_M]
+    qwen3.5-9b: [BF16, Q6_K, Q5_K_M, Q4_K_M, Q3_K_M]

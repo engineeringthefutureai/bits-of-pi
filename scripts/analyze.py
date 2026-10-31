@@ -49,6 +49,7 @@ BUILD_STYLE = {   # same color/marker per build kind as GROUP_STYLE
     "usimat":  GROUP_STYLE["usimat"] | {"label": "DIY + unsloth imatrix"},
     "unsloth": GROUP_STYLE["unsloth"] | {"label": "unsloth file"},
 }
+RECIPE_STYLE = {"color": "#eda100", "marker": "P", "label": "DIY, per-tensor overrides"}   # slot 4
 
 
 def build_kind(variant, group):
@@ -227,7 +228,73 @@ def ref_type(table):
     return ref["variant"].removeprefix("us_") if ref else "reference"
 
 
-def scatter_by_group(ax, table, key, label_points=False, err=None, xkey="bpw"):
+def tint(color, amount=0.88):
+    """Mix a hex color with white: the fill behind a label of that series."""
+    rgb = np.array(matplotlib.colors.to_rgb(color))
+    return tuple(rgb + (1 - rgb) * amount)
+
+
+def place_labels(ax, points, fontsize=6.5, avoid=()):
+    """Boxed labels with leader lines, placed greedily where they overlap nothing.
+
+    points: (x, y, text, color) in data coordinates. Each label is tried at growing distances in
+    eight directions around its point and goes to the first spot inside the axes that clears the
+    markers, the labels already placed and any `avoid` boxes (display coordinates, e.g. a legend).
+    """
+    fig = ax.figure
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    to_px = ax.transData.transform
+    frame = ax.get_window_extent(renderer)
+    pt_px = fig.dpi / 72
+    marks = [to_px((x, y)) for x, y, _, _ in points]
+    taken = [matplotlib.transforms.Bbox.from_extents(mx - 6, my - 6, mx + 6, my + 6) for mx, my in marks]
+    taken += list(avoid)
+    dirs = [(-1, 0), (1, 0), (0, 1), (0, -1), (-1, 1), (1, 1), (-1, -1), (1, -1)]
+    # crowded points first, so they get the spots next to them
+    crowd = [sum(np.hypot(*(np.subtract(m, o))) < 60 for o in marks) for m in marks]
+    for i in sorted(range(len(points)), key=lambda i: -crowd[i]):
+        x, y, text, color = points[i]
+        mx, my = marks[i]
+        t = ax.annotate(text, (x, y), textcoords="offset points", xytext=(0, 0), fontsize=fontsize,
+                        color=INK, ha="center", va="center", zorder=6,
+                        bbox=dict(boxstyle="square,pad=0.25", fc=tint(color), ec=color, lw=0.7),
+                        arrowprops=dict(arrowstyle="-", color=color, lw=0.7, shrinkA=0, shrinkB=4))
+        w, h = (lambda b: (b.width, b.height))(t.get_window_extent(renderer))
+        w, h = w + 4 * pt_px, h + 4 * pt_px                       # the box padding
+        best, best_cost = None, None
+        for r in (16, 26, 38, 52, 68, 86, 108, 134):
+            for dx, dy in dirs:
+                cx = mx + dx * (r * pt_px + w / 2 * abs(dx))
+                cy = my + dy * (r * pt_px * 0.6 + h / 2 * abs(dy))
+                box = matplotlib.transforms.Bbox.from_extents(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2)
+                inside = (box.x0 >= frame.x0 + 2 and box.x1 <= frame.x1 - 2 and
+                          box.y0 >= frame.y0 + 2 and box.y1 <= frame.y1 - 2)
+                if not inside:
+                    continue
+                cost = sum(max(0, min(box.x1, o.x1) - max(box.x0, o.x0)) *
+                           max(0, min(box.y1, o.y1) - max(box.y0, o.y0)) for j, o in enumerate(taken) if j != i)
+                # a leader line that cuts through another label or marker counts as a small overlap
+                seg = np.linspace((mx, my), (cx, cy), 12)[2:-1]
+                cost += 40 * sum(any(o.x0 <= sx <= o.x1 and o.y0 <= sy <= o.y1 for sx, sy in seg)
+                                 for j, o in enumerate(taken) if j != i)
+                cost += 1.5 * r * pt_px                                  # and a long leader costs too
+                if best_cost is None or cost < best_cost:
+                    best, best_cost = (cx, cy, box), cost
+        if best is None:
+            t.remove()
+            continue
+        cx, cy, box = best
+        t.xyann = ((cx - mx) / pt_px, (cy - my) / pt_px)
+        taken.append(box)
+
+
+def short_name(variant):
+    """Label text: unsloth files carry their marker and colour, so the us_ prefix can go."""
+    return variant.removeprefix("us_")
+
+
+def scatter_by_group(ax, table, key, err=None, xkey="bpw"):
     """Markers per group; only the DIY ladder is joined by a line (one recipe, varying bits).
     Other groups mix types (K, IQ, UD) so a line between them would imply a trend that isn't there."""
     for g, style in GROUP_STYLE.items():
@@ -247,17 +314,21 @@ def scatter_by_group(ax, table, key, label_points=False, err=None, xkey="bpw"):
                         capsize=3, elinewidth=1, alpha=0.9, **kw)
         else:
             ax.plot(x, y, linestyle="-" if g == "ladder" else "none", **kw)
-        if label_points and g in ("ladder", "scheme"):
-            for r in pts:
-                ax.annotate(r["variant"], (r[xkey], r[key]), textcoords="offset points", xytext=(4, 4),
-                            fontsize=7, color=MUTED)
+
+
+def label_groups(ax, table, key, groups, xkey="bpw"):
+    """Boxed labels for the points of the given groups. Call after tight_layout, so they stay put."""
+    pts = [(r[xkey], r[key], short_name(r["variant"]), GROUP_STYLE[r["group"]]["color"])
+           for r in table if r["group"] in groups and r[key] is not None and r.get(xkey) is not None]
+    legend = ax.get_legend()
+    place_labels(ax, pts, avoid=[legend.get_window_extent()] if legend else ())
 
 
 def fig_h1(model, table):
-    fig, ax = plt.subplots(figsize=(8, 4.8))
+    fig, ax = plt.subplots(figsize=(11, 6.2))
     ref = next((r for r in table if r["group"] == "reference"), None)
     scatter_by_group(ax, [r for r in table if r["group"] != "reference"], "E1_pi",
-                     label_points=True, err=("E1_pi_min", "E1_pi_max"))
+                     err=("E1_pi_min", "E1_pi_max"))
     if ref and ref["E1_pi"] is not None:
         ax.axhline(ref["E1_pi"], color=INK, linestyle="--", linewidth=1.2)
         ax.annotate(f"{ref_type(table)} reference ({ref['bpw']:.1f} bpw): {ref['E1_pi']:.0f} digits",
@@ -267,7 +338,10 @@ def fig_h1(model, table):
     ax.set_ylabel("E1 correct digits of π\n(median of 3 phrasings, whiskers min–max)")
     ax.set_title(f"{model}: free recall of π vs bits per weight", loc="left", color=INK)
     ax.legend(loc="lower right")
+    top = ax.get_ylim()[1]
+    ax.set_ylim(-0.1 * top, top)          # room under zero for the labels of the most compressed files
     fig.tight_layout()
+    label_groups(ax, table, "E1_pi", [g for g in GROUP_STYLE if g != "reference"])
     fig.savefig(FIGURES / f"{model}_H1_recall.png")
     plt.close(fig)
 
@@ -357,7 +431,7 @@ def fig_speed(model, table):
               ("pp4096_tok_s", "prompt processing, tokens/s\n(llama-bench pp4096)")]
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.4))
     for ax, (key, label) in zip(axes, panels):
-        scatter_by_group(ax, table, key, label_points=True)
+        scatter_by_group(ax, table, key)
         annotate_ref(ax, table, key)
         for r in table:
             if (r.get("n_gpus") or 1) > 1 and r.get(key) is not None:
@@ -365,13 +439,17 @@ def fig_speed(model, table):
                             fontsize=7, color=MUTED)
         ax.set_xlabel("bits per weight")
         ax.set_ylabel(label)
-        ax.set_ylim(bottom=0)
-    axes[0].legend(loc="upper right", fontsize=8)
+        vals = [r[key] for r in table if r.get(key) is not None]
+        if vals:
+            ax.set_ylim(0, 1.15 * max(vals))
+    axes[0].legend(loc="lower right", fontsize=8)
     split = any((r.get("n_gpus") or 1) > 1 for r in table)
     fig.suptitle(f"{model}: speed on one Arc Pro B60 (SYCL)"
-                 + ("; points marked “2 GPUs” are split over both cards" if split else ""),
+                 + ('; points marked "2 GPUs" are split over both cards' if split else ""),
                  x=0.01, ha="left", color=INK)
     fig.tight_layout()
+    for ax, (key, _) in zip(axes, panels):
+        label_groups(ax, table, key, ("ladder", "scheme"))
     fig.savefig(FIGURES / f"{model}_speed.png")
     plt.close(fig)
 
@@ -472,26 +550,113 @@ def fig_h6(model, rows, table):
 
 
 MODEL_COLORS = ["#2a78d6", "#eb6834", "#1baf7a"]   # categorical slots 1-3, one per model size
+SEQ_COLORS = ["#a9c8f2", "#7aa9e8", "#4d8ade", "#2a6fc4", "#1b5aa8", "#0f3d78"]   # one hue, light to dark
 
 
-def fig_h5(models):
-    """H5: the same quant types across model sizes, from each model's headline table."""
+def seq_colors(k):
+    """k steps of SEQ_COLORS, darkest last; interpolated when there are more than six."""
+    if k <= len(SEQ_COLORS):
+        return SEQ_COLORS[-k:] if k else []
+    cmap = matplotlib.colors.LinearSegmentedColormap.from_list("seq", SEQ_COLORS)
+    return [matplotlib.colors.to_hex(cmap(t)) for t in np.linspace(0, 1, k)]
+
+
+# Follow-up R: unsloth's recipe taken apart, one change per row, top to bottom
+RECIPE_ROWS = [
+    ("Q4_K_M", [
+        ("Q4_K_M",                 "stock recipe, no imatrix"),
+        ("Q4_K_M_imat",            "stock recipe, own imatrix"),
+        ("Q4_K_M_usimat",          "stock recipe, unsloth imatrix"),
+        ("Q4_K_M_usimat_ssmout",   "  + ssm_out at 5 bits"),
+        ("Q4_K_M_usimat_ssmab",    "  + ssm_alpha, ssm_beta at 8 bits"),
+        ("Q4_K_M_usimat_qkv",      "  + attn_qkv at 5 bits"),
+        ("Q4_K_M_usrecipe",        "unsloth recipe, no imatrix"),
+        ("Q4_K_M_usrecipe_imat",   "unsloth recipe, own imatrix"),
+        ("Q4_K_M_usrecipe_usimat", "unsloth recipe, unsloth imatrix (our rebuild)"),
+        ("us_Q4_K_M",              "unsloth's file"),
+    ]),
+    ("Q2_K", [
+        ("Q2_K",                   "stock recipe, no imatrix"),
+        ("Q2_K_ssm",               "  + ssm_out 5 bits, ssm_alpha/beta 8 bits"),
+        ("Q2_K_imat",              "stock recipe, own imatrix"),
+        ("Q2_K_imat_ssm",          "  + ssm_out 5 bits, ssm_alpha/beta 8 bits"),
+        ("Q2_K_usrecipe_imat",     "UD-Q2_K_XL recipe, own imatrix"),
+        ("Q2_K_usrecipe_usimat",   "UD-Q2_K_XL recipe, unsloth imatrix (our rebuild)"),
+        ("us_UD-Q2_K_XL",          "unsloth's UD-Q2_K_XL file"),
+    ]),
+]
+
+
+def fig_recipe(model, table):
+    need = ("E1_pi", "E1_pi_min", "E1_pi_max", "E2_kl_pi", "file_gb")
+    rows = {r["variant"]: r for r in table if all(r.get(k) is not None for k in need)}
+    blocks = [(t, [(v, lab) for v, lab in items if v in rows]) for t, items in RECIPE_ROWS]
+    blocks = [(t, items) for t, items in blocks if items]
+    if not any(rows[v]["group"] == "recipe" for _, items in blocks for v, _ in items):
+        return
+    n = sum(len(items) for _, items in blocks)
+    fig, axes = plt.subplots(len(blocks), 3, figsize=(13, 1.2 + 0.36 * n), sharex="col", squeeze=False,
+                             gridspec_kw={"height_ratios": [len(items) for _, items in blocks],
+                                          "width_ratios": [2.2, 1.6, 1.2]})
+    for (title, items), (a1, a2, a3) in zip(blocks, axes):
+        y = np.arange(len(items))[::-1]
+        for yi, (v, _) in zip(y, items):
+            r = rows[v]
+            style = BUILD_STYLE[build_kind(v, r["group"])] if r["group"] != "recipe" else RECIPE_STYLE
+            a1.errorbar([r["E1_pi"]], [yi], xerr=[[r["E1_pi"] - r["E1_pi_min"]], [r["E1_pi_max"] - r["E1_pi"]]],
+                        color=style["color"], marker=style["marker"], markersize=7, capsize=3,
+                        markeredgecolor="white", markeredgewidth=1, elinewidth=1)
+            a1.annotate(f"{r['E1_pi']:.0f}", (r["E1_pi"], yi), textcoords="offset points", xytext=(0, 6),
+                        ha="center", fontsize=7, color=MUTED)
+            a2.plot([r["E2_kl_pi"]], [yi], color=style["color"], marker=style["marker"], markersize=7,
+                    markeredgecolor="white", markeredgewidth=1, linestyle="none")
+            a3.barh([yi], [r["file_gb"]], color=style["color"], height=0.6)
+            a3.annotate(f"{r['file_gb']:.2f}", (r["file_gb"], yi),
+                        textcoords="offset points", xytext=(3, -3), fontsize=7, color=MUTED)
+        a1.set_yticks(y, [lab for _, lab in items], fontsize=8)
+        for a in (a2, a3):
+            a.set_yticks(y, [])
+        a1.set_ylim(-0.6, len(items) - 0.4)
+        a1.set_title(f"{title} family", loc="left", color=INK, fontsize=10)
+        a1.set_xscale("symlog", linthresh=10)
+        a2.set_xscale("log")
+    axes[-1][0].set_xlabel("E1 correct digits of π (median of 3, whiskers worst to best wording)")
+    axes[-1][1].set_xlabel("noise on π (KL from BF16, log)")
+    axes[-1][2].set_xlabel("file size (GB)")
+    handles = [plt.Line2D([], [], color=s["color"], marker=s["marker"], linestyle="none", label=s["label"])
+               for s in (BUILD_STYLE["plain"], BUILD_STYLE["own"], BUILD_STYLE["usimat"], RECIPE_STYLE,
+                         BUILD_STYLE["unsloth"])]
+    fig.legend(handles=handles, loc="lower center", ncol=5, fontsize=8, frameon=False)
+    fig.suptitle(f"{model}: unsloth's recipe taken apart, one change at a time", x=0.01, ha="left", color=INK)
+    fig.tight_layout(rect=(0, 0.04, 1, 1))
+    fig.savefig(FIGURES / f"{model}_recipe.png")
+    plt.close(fig)
+
+
+def load_headlines(models):
     tables = {}
     for m in models:
         p = SCORES / f"{m}_headline.csv"
         if p.exists():
             with open(p) as f:
-                tables[m] = [{k: (float(v) if v not in ("", "None") and k not in ("variant", "group") else v)
-                              for k, v in r.items()} for r in csv.DictReader(f)]
+                tables[m] = [{k: (v if k in ("variant", "group") else None if v in ("", "None") else float(v))
+                              for k, v in r.items()} for r in csv.DictReader(f) if r["group"] != "recipe"]
+    return tables
+
+
+def fig_h5(models):
+    """H5: the same quant types across model sizes, from each model's headline table."""
+    tables = load_headlines(models)
     if len(tables) < 2:
         return
-    panels = [("E1_pi", "E1 correct digits of π (median of 3)", False, "bpw"),
-              ("E1_pi", "E1 correct digits of π (median of 3)", False, "file_gb"),
-              ("E2_kl_pi", "noise on π (KL from the reference, log)", True, "bpw"),
-              ("E2_kl_random", "noise on random digits (KL from the reference, log)", True, "bpw")]
-    fig, axes = plt.subplots(2, 2, figsize=(12, 9.5))
-    axes = axes.ravel()
-    for ax, (key, label, log, xkey) in zip(axes, panels):
+    panels = [("E1_pi", "E1 correct digits of π (median of 3)", False),
+              ("E2_kl_pi", "noise on π (KL from the reference, log)", True),
+              ("E2_kl_random", "noise on random digits (KL from the reference, log)", True)]
+    fig = plt.figure(figsize=(12, 9.5))
+    grid = fig.add_gridspec(2, 2)
+    axes = [fig.add_subplot(grid[0, :]), fig.add_subplot(grid[1, 0]), fig.add_subplot(grid[1, 1])]
+    xkey = "bpw"
+    for ax, (key, label, log) in zip(axes, panels):
         for (m, table), color in zip(tables.items(), MODEL_COLORS):
             for group, ls, marker in (("ladder", "-", "o"), ("unsloth", "none", "D")):
                 pts = sorted([r for r in table if r["group"] == group and isinstance(r.get(key), float)],
@@ -508,20 +673,179 @@ def fig_h5(models):
             ax.set_yscale("log")
         else:
             ax.axhline(1200, color=MUTED, linestyle=":", linewidth=1, label="generation cap (1,200 digits)")
-        if xkey == "bpw":
-            ax.set_xlim(2.5, 9)
-            ax.set_xlabel("bits per weight")
-        else:
-            ax.set_xlim(0, max(r["file_gb"] for tb in tables.values() for r in tb) * 1.05)
-            ax.set_xlabel("file size (GB): equal memory, different model sizes")
+        ax.set_xlim(2.5, 9)
+        ax.set_xlabel("bits per weight")
         ax.set_ylabel(label)
     axes[0].set_title(f"same quant types, {len(tables)} model sizes", loc="left", color=INK)
-    axes[1].set_title("π recall by file size", loc="left", color=INK)
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", ncol=4, fontsize=8, frameon=False)
     fig.tight_layout(rect=(0, 0.06, 1, 1))
     fig.savefig(FIGURES / "H5_model_size.png")
     plt.close(fig)
+
+
+def pick_rate(tables, key, max_gap=0.5):
+    """Of two versions of one model within max_gap bpw that recall different lengths, how often
+    the one with the smaller `key` (larger for bpw) is the one that recalls more."""
+    hits = n = 0
+    for table in tables.values():
+        rows = [r for r in table if isinstance(r.get("E2_kl_pi"), float) and isinstance(r.get("E1_pi"), float)]
+        for i, a in enumerate(rows):
+            for b in rows[i + 1:]:
+                if abs(a["bpw"] - b["bpw"]) > max_gap or a["E1_pi"] == b["E1_pi"]:
+                    continue
+                sign = 1 if key == "bpw" else -1
+                n += 1
+                hits += sign * (a[key] - b[key]) * (a["E1_pi"] - b["E1_pi"]) > 0
+    return hits, n
+
+
+def fig_noise(models):
+    """Can the noise score stand in for the slow recall test? Noise on π vs on unrelated digits."""
+    tables = load_headlines(models)
+    ceiling = {m: next((r["E1_pi"] for r in t if r["group"] == "reference"), None) for m, t in tables.items()}
+    tables = {m: [r for r in t if isinstance(r.get("E1_pi"), float)] for m, t in tables.items()
+              if ceiling[m] is not None}
+    # versions that recall as far as their reference sit at the ceiling and say nothing about the slope
+    pts = [(m, r) for m, t in tables.items() for r in t
+           if isinstance(r.get("E2_kl_pi"), float) and r["E1_pi"] < ceiling[m]]
+    if len(pts) < len(tables) + 2:
+        return
+    # one slope for all sizes, one offset per size: log10(digits + 1) = a * log10(noise) + b_model
+    x = np.log10([r["E2_kl_pi"] for _, r in pts])
+    y = np.log10([r["E1_pi"] + 1 for _, r in pts])
+    onehot = np.array([[m == k for k in tables] for m, _ in pts], dtype=float)
+    coef, *_ = np.linalg.lstsq(np.column_stack([x, onehot]), y, rcond=None)
+    resid = y - np.column_stack([x, onehot]) @ coef
+    stats = {"slope": coef[0], "digits_per_10x": 10 ** -coef[0], "typical_miss": 10 ** resid.std(),
+             "r2": 1 - resid.var() / y.var()}
+    for key in ("E2_kl_pi", "E2_kl_random", "bpw"):
+        stats[f"pick_{key}"] = pick_rate(tables, key)
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.8), sharey=True)
+    panels = [("E2_kl_pi", "noise on π (KL from the reference, log)"),
+              ("E2_kl_random", "noise on random digits (KL from the reference, log)")]
+    for ax, (key, label) in zip(axes, panels):
+        for (m, table), color in zip(tables.items(), MODEL_COLORS):
+            for group in GROUP_STYLE:
+                sel = [r for r in table if r["group"] == group and isinstance(r.get(key), float)]
+                if sel:
+                    ax.scatter([r[key] for r in sel], [max(r["E1_pi"], 1) for r in sel], s=40,
+                               marker=GROUP_STYLE[group]["marker"], color=color, edgecolor="white",
+                               linewidth=1, zorder=3)
+            if key == "E2_kl_pi":
+                xs = np.logspace(np.log10(min(r[key] for r in table if isinstance(r.get(key), float))),
+                                 np.log10(max(r[key] for r in table if isinstance(r.get(key), float))), 50)
+                b = coef[1 + list(tables).index(m)]
+                ax.plot(xs, np.minimum(10 ** (coef[0] * np.log10(xs) + b) - 1, ceiling[m]),
+                        color=color, linewidth=1.5, alpha=0.8)
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlabel(label)
+    axes[0].set_ylabel("E1 correct digits of π (median of 3, log; 0 drawn at 1)")
+    def share(key):
+        h, n = stats[key]
+        return f"{h / n:.0%}" if n else "n/a"
+    axes[0].set_title(f"noise on π: picks the better of two similar files {share('pick_E2_kl_pi')} of the time",
+                      loc="left", color=INK, fontsize=10)
+    axes[1].set_title(f"noise on random digits: {share('pick_E2_kl_random')} (file size alone: {share('pick_bpw')})",
+                      loc="left", color=INK, fontsize=10)
+    handles = [plt.Line2D([], [], color=c, marker="o", linestyle="-", label=m)
+               for m, c in zip(tables, MODEL_COLORS)]
+    handles += [plt.Line2D([], [], color=MUTED, marker=GROUP_STYLE[g]["marker"], linestyle="none",
+                           label=GROUP_STYLE[g]["label"]) for g in ("ladder", "imatrix", "unsloth", "usimat", "scheme")]
+    fig.legend(handles=handles, loc="lower center", ncol=8, fontsize=8, frameon=False)
+    fig.suptitle("does a quick noise test predict how far a version recites π?", x=0.01, ha="left", color=INK)
+    fig.tight_layout(rect=(0, 0.06, 1, 1))
+    fig.savefig(FIGURES / "noise_predicts_recall.png")
+    plt.close(fig)
+    with open(SCORES / "noise_predicts_recall.json", "w") as f:
+        json.dump(stats, f, indent=1)
+
+
+def digit_odds_under(setting, top_lp, top_ids, correct, lp_correct):
+    """Chance of sampling the right digit at one position, applying llama.cpp's order:
+    top-k, then top-p on the renormalized survivors, then temperature."""
+    if setting["top_k"] <= 0 and setting["top_p"] >= 1 and setting["temperature"] == 1:
+        return float(np.exp(lp_correct))
+    lp = top_lp[:setting["top_k"]] if setting["top_k"] > 0 else top_lp
+    ids = top_ids[:len(lp)]
+    p = np.exp(lp - lp.max())
+    p /= p.sum()
+    keep = int(np.searchsorted(np.cumsum(p), setting["top_p"]) + 1) if setting["top_p"] < 1 else len(p)
+    lp, ids = lp[:keep], ids[:keep]
+    q = np.exp((lp - lp.max()) / setting["temperature"])
+    q /= q.sum()
+    hit = np.where(ids == correct)[0]
+    return float(q[hit[0]]) if len(hit) else 0.0
+
+
+def sampling_rows(cfg, model):
+    """Forecast vs observed for every sampled variant of a model: survival curves and summaries."""
+    out = []
+    s = cfg.get("sampling", {})
+    for variant in s.get("variants", {}).get(model, []):
+        top_p = TF / model / variant / "sampling" / "pi_top.parquet"
+        samples = read_jsonl(RUNS / model / variant / "S.jsonl")
+        tf = load_tf(model, variant, "pi")
+        if not top_p.exists() or not samples or tf is None:
+            continue
+        top = pq.read_table(top_p).to_pandas()
+        lp_correct = tf["logprob"].to_numpy()
+        n_digits = len(top)
+        wrong = np.where(tf["rank"].to_numpy() > 0)[0]
+        greedy = int(wrong[0]) if len(wrong) else n_digits          # top choice first differs from π
+        for name, setting in s["settings"].items():
+            p = np.array([digit_odds_under(setting, np.asarray(r.top_logprobs), np.asarray(r.top_ids),
+                                           r.correct_token, lp_correct[k]) for k, r in enumerate(top.itertuples())])
+            survive = np.concatenate([[1.0], np.cumprod(p)])          # P(at least n digits right), falling
+            got = np.array([r["prefix"] for r in samples if r["setting"] == name])
+            observed = np.array([(got >= n).mean() for n in range(n_digits + 1)])
+            out.append({"model": model, "variant": variant, "setting": name, "n": len(got),
+                        "greedy": greedy, "forecast_mean": float(survive[1:].sum()),
+                        "observed_mean": float(got.mean()),
+                        "forecast_median": int((survive >= 0.5).sum()) - 1,   # last n with P(>= n) >= 1/2
+                        "observed_median": float(np.median(got)),
+                        "survive": survive, "observed": observed, "p": p})
+    return out
+
+
+def fig_sampling(cfg, models):
+    rows = [r for m in models for r in sampling_rows(cfg, m)]
+    if not rows:
+        return
+    models = [m for m in models if any(r["model"] == m for r in rows)]
+    settings = list(cfg["sampling"]["settings"])
+    fig, axes = plt.subplots(len(models), len(settings), figsize=(12, 4.2 * len(models)), squeeze=False)
+    titles = {"t1": "plain sampling (temperature 1)", "chat": "chat settings (temp 0.7, top-k 20, top-p 0.8)"}
+    for i, m in enumerate(models):
+        for j, name in enumerate(settings):
+            ax = axes[i][j]
+            sel = [r for r in rows if r["model"] == m and r["setting"] == name]
+            for r, color in zip(sel, seq_colors(len(sel))[::-1]):
+                n = np.arange(len(r["survive"]))
+                ax.plot(n, r["survive"], color=color, linewidth=1.5,
+                        label=f"{r['variant']}: forecast {r['forecast_mean']:.0f}, measured {r['observed_mean']:.0f}")
+                ax.step(n, r["observed"], where="post", color=color, linewidth=1, linestyle=":")
+            ax.set_xscale("symlog", linthresh=10)
+            ax.set_xlim(0, len(sel[0]["survive"]))
+            ax.set_ylim(-0.02, 1.02)
+            ax.set_title(f"{m}, {titles.get(name, name)}", loc="left", color=INK, fontsize=10)
+            ax.set_xlabel("digits of π recited correctly (log past 10)")
+            ax.set_ylabel("share of recitations that get this far")
+            ax.legend(fontsize=7, loc="lower left", frameon=False, title="mean digits", title_fontsize=7)
+    fig.suptitle("per-digit certainty forecasts sampled recitations (solid: forecast from one teacher-forced pass, "
+                 f"dotted: measured over {rows[0]['n']} real samples)", x=0.01, ha="left", color=INK)
+    fig.tight_layout()
+    fig.savefig(FIGURES / "sampling_forecast.png")
+    plt.close(fig)
+    keys = ["model", "variant", "setting", "n", "greedy", "forecast_mean", "observed_mean",
+            "forecast_median", "observed_median"]
+    with open(SCORES / "sampling.csv", "w", newline="") as f:
+        w = csv.DictWriter(f, keys)
+        w.writeheader()
+        for r in rows:
+            w.writerow({k: (round(r[k], 1) if isinstance(r[k], float) else r[k]) for k in keys})
 
 
 def main():
@@ -535,7 +859,8 @@ def main():
         if not rows:
             continue
         meta = load_meta(model)
-        table = headline(model, cfg, rows, meta)
+        full = headline(model, cfg, rows, meta)
+        table = [r for r in full if r["group"] != "recipe"]   # follow-up R has its own figure
         fig_h1(model, table)
         fig_tradeoffs(model, table)
         fig_speed(model, table)
@@ -544,8 +869,11 @@ def main():
         fig_errors(model, rows, table, "E3", "verbatim copy errors by type")
         fig_errors(model, rows, table, "E4b", "spell-as-words errors by type (clarified prompt)")
         fig_h6(model, rows, table)
+        fig_recipe(model, full)
         print(f"{model}: {len(table)} variants -> scores/{model}_headline.md, figures/{model}_*.png")
     fig_h5(list(cfg["models"]))
+    fig_noise(list(cfg["models"]))
+    fig_sampling(cfg, list(cfg["models"]))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How the Experiments Work</title>
+<meta name="description" content="The seven tests behind Qwen Digit Recall, with real prompts and answers, and teacher forcing explained step by step with worked examples from Qwen 3.5 4B.">
+<meta name="author" content="Kiryl Dubarenka">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How the Experiments Work">
+<meta property="og:description" content="The seven tests behind Qwen Digit Recall, with real prompts and answers, and teacher forcing explained step by step with worked examples from Qwen 3.5 4B.">
+<meta property="og:url" content="https://bits-of-pi.engineeringthefuture.ai/method.html">
+<meta property="og:image" content="https://bits-of-pi.engineeringthefuture.ai/figures/H5_model_size.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232a78d6'/%3E%3Ctext x='32' y='46' font-family='Georgia,serif' font-size='44' text-anchor='middle' fill='white'%3E%CF%80%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<main>
+  <nav class="site-nav" aria-label="Pages"><a href="./">Results</a><a href="method.html" aria-current="page">How the experiments work</a><a href="guide.html">How the model files were made</a></nav>
+  <header style="display:grid; gap:14px;">
+    <div class="eyebrow">Qwen Digit Recall · method</div>
+    <h1>How the experiments work</h1>
+    <p class="lede">Every version of every model went through the same seven tests on the same machine with the same settings. This page shows each test with a real prompt and a real answer, then takes teacher forcing, the measurement most of the findings rest on, apart step by step.</p>
+  </header>
+
+  <section>
+    <div class="eyebrow">Setup</div>
+    <h2>One machine, one build, greedy decoding</h2>
+    <dl class="guide">
+      <dt>Hardware</dt>
+      <dd>Two Intel Arc Pro B60 cards with 24 GB each, and 30 GB of system memory. Each version ran on one card, except the three largest 27B files, which were split over both.</dd>
+      <dt>Software</dt>
+      <dd>llama.cpp at commit <code>bed0a8566</code>, built for the SYCL backend. Models were served by <code>llama-server</code> with a context of 8,192 tokens, every layer on the GPU, a 16-bit KV cache, flash attention off and the prompt cache off.</dd>
+      <dt>Decoding</dt>
+      <dd>Greedy: temperature 0 and top-k 1, so the model always writes its most likely token, with no repetition penalties, a fixed seed and Qwen's "thinking" mode off. Sampling was tested separately (see the end of this page).</dd>
+      <dt>Order of work</dt>
+      <dd>One version at a time. The reference runs first, then each version is downloaded or built, put through every test, and deleted to free the disk. The pipeline can be stopped and restarted at any point.</dd>
+    </dl>
+  </section>
+
+  <section>
+    <div class="eyebrow">The tests</div>
+    <h2>Seven tests, from setup check to recall as words</h2>
+    <p class="prose">Two kinds of prompt are used. Recall prompts (E1, E2) go to the model as raw text with no chat template, so the model simply continues the text. Copying prompts (E3–E6) go through the chat template, the way an assistant would receive them.</p>
+
+    <div class="test">
+      <h3><span class="tag">E0</span> Setup check</h3>
+      <p>Before any test, each file is checked. The tokenizer has to split <code>3.14159…</code> into one token per digit, so that every digit is a separate decision. Thinking has to be off. The same request has to give byte-identical output when repeated, after a server restart, and (for the 4B) on both cards. Every model passed.</p>
+    </div>
+
+    <div class="test">
+      <h3><span class="tag">E1</span> Recite from memory</h3>
+      <p>Nine prompts, π, e and √2 in three wordings each, and the model continues the text for up to 1,200 tokens.</p>
+      <pre class="prompt">Pi to 1000 decimal places:
+3.</pre>
+      <pre class="prompt">The decimal expansion of pi is 3.</pre>
+      <pre class="prompt">π = 3.</pre>
+      <p>The score is the number of digits that match the true constant before the first difference. Line breaks inside the digits are ignored, because some models wrap every 50 digits. Figures show the middle of the three wordings. Here is the 4B's Q4_K_M answering the third prompt. It is right for 123 digits, then writes a 5 where π has an 8, and everything after that is invented:</p>
+      <pre class="prompt answer">14159265358979323846264338327950288419716939937510…92307816406286208998628034825342117067982148086513282306647093<span class="mark-bad">5</span><span class="mark-off">44433926795…</span></pre>
+    </div>
+
+    <div class="test">
+      <h3><span class="tag">E2</span> Teacher forcing</h3>
+      <p>The model is fed the true digits of π, e, √2 and a string of random digits, and at every position the full probability of every possible next token is recorded. It gets its own section below.</p>
+    </div>
+
+    <div class="test">
+      <h3><span class="tag">E3</span> Copy digits from the prompt</h3>
+      <pre class="prompt">Repeat the following digits exactly. Output only the digits, with no spaces or other text.
+
+2023936130076680163734623756245510134498341428659591699655649203685439088903072823493493719858566651</pre>
+      <p>40 random strings: 10 each of 100, 300 and 1,000 digits, and 10 of 300 digits packed with runs of repeated digits (like 8888), 17,000 digits in all. The answer is aligned with the original, and every wrong, extra or missing digit counts as one error. Scores are errors per 100 digits.</p>
+    </div>
+
+    <div class="test">
+      <h3><span class="tag">E4b</span> Copy digits as words</h3>
+      <pre class="prompt">Spell out each digit below separately as an English word (zero, one, two, three, four, five, six, seven, eight, nine), one word per digit, separated by single spaces. Do not read the digits as a number. For example, 507 becomes: five zero seven. Output nothing else.
+
+20239361300766801637346237562455…</pre>
+      <pre class="prompt answer">two zero two three nine three six one three zero zero seven six six eight zero one six three seven three four six two…</pre>
+      <p>30 strings of 100 and 300 digits, scored like E3 after the words are turned back into digits. The first version of this prompt (E4) had no example, and the model read it as "say this number", answering "twenty trillion two hundred…" even at full precision. E4b replaced it.</p>
+    </div>
+
+    <div class="test">
+      <h3><span class="tag">E5</span> Copy π with one digit changed</h3>
+      <pre class="prompt">Repeat the following digits exactly. Output only the digits, with no spaces or other text.
+
+3.1415926535<span class="mark-bad">3</span>9793238462643383279502884197169399375105820974944…</pre>
+      <p>Eight prompts plant one wrong digit at position 10, 50, 150 or 290 of π or e. Each answer is classed by what it wrote there: the planted digit (a faithful copy), the true digit (memory won), or something else (the copy failed). The 4B's BF16 answered this one with <code>3.1415926535<b>8</b>979…</code>, putting back the real 8 from memory.</p>
+    </div>
+
+    <div class="test">
+      <h3><span class="tag">E6</span> Recite as words</h3>
+      <pre class="prompt">Write the first 500 decimal places of pi (the digits after "3.") as English words (zero, one, two, …), separated by single spaces. Output nothing else.</pre>
+      <p>Recall and spelling at once. Only the 27B managed it, staying right for 46 digits of π, while the 4B counted "zero one two three…" and the 9B produced fragments from the wrong place.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow" id="teacher-forcing">E2 · teacher forcing</div>
+    <h2>Teacher forcing, step by step</h2>
+    <p class="prose">Free recitation gives one number per run: where the first mistake was. Everything after it is lost, because the model is now continuing its own wrong text. Teacher forcing measures every position instead. The examples below all come from the 4B, comparing its BF16 original with two compressed versions, Q6_K (6.6 bits per weight) and Q4_K_M (5.2).</p>
+
+    <h3>1. Free recitation stops at the first wrong digit</h3>
+    <p class="prose">Q6_K reciting π, around position 813. It writes 7 where π has 9, and from there it is reciting a number that doesn't exist.</p>
+    <div class="ruler">
+      <div class="ruler-row">
+        <div class="ruler-label">what Q6_K wrote, positions 805–824</div>
+        <div class="tokstrip">
+          <span class="tk">5</span><span class="tk">9</span><span class="tk">4</span><span class="tk">5</span><span class="tk">5</span><span class="tk">3</span><span class="tk">4</span><span class="tk">6</span><span class="tk bad">7</span><span class="tk off">0</span><span class="tk off">0</span><span class="tk off">1</span><span class="tk off">8</span><span class="tk off">8</span><span class="tk off">4</span><span class="tk off">4</span><span class="tk off">7</span><span class="tk off">6</span><span class="tk off">5</span><span class="tk off">5</span>
+        </div>
+      </div>
+      <div class="ruler-row">
+        <div class="ruler-label">the real digits of π</div>
+        <div class="tokstrip">
+          <span class="tk">5</span><span class="tk">9</span><span class="tk">4</span><span class="tk">5</span><span class="tk">5</span><span class="tk">3</span><span class="tk">4</span><span class="tk">6</span><span class="tk">9</span><span class="tk">0</span><span class="tk">8</span><span class="tk">3</span><span class="tk">0</span><span class="tk">2</span><span class="tk">6</span><span class="tk">4</span><span class="tk">2</span><span class="tk">5</span><span class="tk">2</span><span class="tk">2</span>
+        </div>
+      </div>
+    </div>
+    <p class="prose">The score is 813, and that is all this run can tell us. Was the model unsure at 813, or did compression break it there? Is the digit after it fine? Free recitation can't say.</p>
+
+    <h3>2. Teacher forcing feeds the true digits back in</h3>
+    <p class="prose">The model is given the whole true text in one pass: the prompt <code>Pi to 1000 decimal places: 3.</code> followed by the 1,000 true digits. At every digit it predicts the next one, just as it would while writing. Its own prediction is never fed back, so the next position always sees the true digit. So one mistake doesn't spoil the rest, and every position gets measured.</p>
+    <div class="table-wrap">
+      <table class="tf">
+        <thead><tr><th>position</th><th>807</th><th>808</th><th>809</th><th>810</th><th>811</th><th>812</th><th>813</th><th>814</th><th>815</th><th>816</th><th>817</th></tr></thead>
+        <tbody>
+          <tr><th>true digit, fed in</th><td>4</td><td>5</td><td>5</td><td>3</td><td>4</td><td>6</td><td>9</td><td>0</td><td>8</td><td>3</td><td>0</td></tr>
+          <tr><th>BF16 · true digit</th><td>100%</td><td>100%</td><td>99.8%</td><td>100%</td><td>100%</td><td>100%</td><td class="thin">52.5%</td><td>99.7%</td><td>100%</td><td>98.1%</td><td>98.8%</td></tr>
+          <tr><th>Q6_K · top choice</th><td>4</td><td>5</td><td>5</td><td>3</td><td>4</td><td>6</td><td class="flip">7</td><td>0</td><td>8</td><td>3</td><td>0</td></tr>
+          <tr><th>Q6_K · true digit</th><td>100%</td><td>100%</td><td>99.6%</td><td>100%</td><td>100%</td><td>100%</td><td class="flip">16.7%</td><td>98.8%</td><td>100%</td><td>99.2%</td><td>99.2%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">The "true digit" rows give the chance the model put on the real digit. Now the picture is clear. Position 813 is the one digit in this stretch where BF16 itself was barely more than a coin flip, 52.5%. Q6_K's small rounding errors were enough to tip it the other way. At 814, fed the true 9, Q6_K is back to 98.8% sure of the right digit.</p>
+
+    <h3>3. What is recorded at each position</h3>
+    <p class="prose">At each of the 1,000 positions the full probability of every token in the vocabulary is saved, about 250,000 numbers per position. Four cases show what those numbers look like. Bars are the model's probability for each candidate next token. <span class="legend-inline"><span><i style="background:var(--accent)"></i>the true digit</span><span><i style="background:var(--warn)"></i>anything else</span></span></p>
+    <div class="cards">
+      <div class="card">
+        <h4>Position 813: a near-tie</h4>
+        <div class="ctx">…59455346 <b>9</b> 08302…</div>
+        <div class="bars">
+          <div class="who">BF16</div>
+          <div class="bar-row"><span class="lab">9</span><span class="bar-track"><span class="bar-fill" style="width:52.5%; display:block"></span></span><span class="v">0.525</span></div>
+          <div class="bar-row"><span class="lab">7</span><span class="bar-track"><span class="bar-fill wrong" style="width:47.4%; display:block"></span></span><span class="v">0.474</span></div>
+          <div class="who">Q6_K</div>
+          <div class="bar-row"><span class="lab">7</span><span class="bar-track"><span class="bar-fill wrong" style="width:83.3%; display:block"></span></span><span class="v">0.833</span></div>
+          <div class="bar-row"><span class="lab">9</span><span class="bar-track"><span class="bar-fill" style="width:16.7%; display:block"></span></span><span class="v">0.167</span></div>
+          <div class="who">Q4_K_M</div>
+          <div class="bar-row"><span class="lab">7</span><span class="bar-track"><span class="bar-fill wrong" style="width:99.9%; display:block"></span></span><span class="v">0.999</span></div>
+          <div class="bar-row"><span class="lab">9</span><span class="bar-track"><span class="bar-fill" style="width:0.6%; display:block"></span></span><span class="v">0.001</span></div>
+        </div>
+        <div class="verdict-line">BF16 can barely choose. Any noise decides it, and both compressed versions flip.</div>
+      </div>
+      <div class="card">
+        <h4>Position 123: a sure digit</h4>
+        <div class="ctx">…06647093 <b>8</b> 44609…</div>
+        <div class="bars">
+          <div class="who">BF16</div>
+          <div class="bar-row"><span class="lab">8</span><span class="bar-track"><span class="bar-fill" style="width:99.5%; display:block"></span></span><span class="v">0.995</span></div>
+          <div class="bar-row"><span class="lab">3</span><span class="bar-track"><span class="bar-fill wrong" style="width:0.6%; display:block"></span></span><span class="v">0.002</span></div>
+          <div class="who">Q6_K</div>
+          <div class="bar-row"><span class="lab">8</span><span class="bar-track"><span class="bar-fill" style="width:99.4%; display:block"></span></span><span class="v">0.994</span></div>
+          <div class="bar-row"><span class="lab">3</span><span class="bar-track"><span class="bar-fill wrong" style="width:0.6%; display:block"></span></span><span class="v">0.003</span></div>
+          <div class="who">Q4_K_M</div>
+          <div class="bar-row"><span class="lab">5</span><span class="bar-track"><span class="bar-fill wrong" style="width:73.1%; display:block"></span></span><span class="v">0.731</span></div>
+          <div class="bar-row"><span class="lab">8</span><span class="bar-track"><span class="bar-fill" style="width:23.3%; display:block"></span></span><span class="v">0.233</span></div>
+        </div>
+        <div class="verdict-line">BF16 is certain, and Q6_K hardly moves. Q4_K_M flips it anyway: with enough noise, even sure digits fall.</div>
+      </div>
+      <div class="card">
+        <h4>Position 326: drifting</h4>
+        <div class="ctx">…17488152 <b>0</b> 92096…</div>
+        <div class="bars">
+          <div class="who">BF16</div>
+          <div class="bar-row"><span class="lab">0</span><span class="bar-track"><span class="bar-fill" style="width:77.9%; display:block"></span></span><span class="v">0.779</span></div>
+          <div class="bar-row"><span class="lab">5</span><span class="bar-track"><span class="bar-fill wrong" style="width:20.4%; display:block"></span></span><span class="v">0.204</span></div>
+          <div class="who">Q6_K</div>
+          <div class="bar-row"><span class="lab">0</span><span class="bar-track"><span class="bar-fill" style="width:70.5%; display:block"></span></span><span class="v">0.705</span></div>
+          <div class="bar-row"><span class="lab">5</span><span class="bar-track"><span class="bar-fill wrong" style="width:28.1%; display:block"></span></span><span class="v">0.281</span></div>
+          <div class="who">Q4_K_M</div>
+          <div class="bar-row"><span class="lab">0</span><span class="bar-track"><span class="bar-fill" style="width:52.9%; display:block"></span></span><span class="v">0.529</span></div>
+          <div class="bar-row"><span class="lab">5</span><span class="bar-track"><span class="bar-fill wrong" style="width:46.9%; display:block"></span></span><span class="v">0.469</span></div>
+        </div>
+        <div class="verdict-line">Still right in all three, but the runner-up gains with every bit removed. A little more noise and it flips.</div>
+      </div>
+      <div class="card">
+        <h4>Position 10: the model wants to stop</h4>
+        <div class="ctx">3.1415926535 <b>8</b> 97932…</div>
+        <div class="bars">
+          <div class="who">BF16</div>
+          <div class="bar-row"><span class="lab">8</span><span class="bar-track"><span class="bar-fill" style="width:73%; display:block"></span></span><span class="v">0.730</span></div>
+          <div class="bar-row"><span class="lab">␣</span><span class="bar-track"><span class="bar-fill wrong" style="width:18.1%; display:block"></span></span><span class="v">0.181</span></div>
+          <div class="bar-row"><span class="lab">…</span><span class="bar-track"><span class="bar-fill wrong" style="width:6%; display:block"></span></span><span class="v">0.060</span></div>
+        </div>
+        <div class="verdict-line">The runner-ups here aren't digits. They are a space and "...". π is very often printed as 3.1415926535 and then cut off, and the model has learned that habit.</div>
+      </div>
+    </div>
+
+    <h3>4. From probabilities to odds</h3>
+    <p class="prose">The results pages describe certainty as <b>odds</b>: the probability of the true digit divided by the probability of the strongest alternative, whatever token that is.</p>
+    <div class="calc">position 813, BF16:  0.525 ÷ 0.474 = 1.1×   (a dead heat)<br>position 326, BF16:  0.779 ÷ 0.204 = 3.8×   (shaky)<br>position 123, BF16:  0.995 ÷ 0.0022 ≈ 460×  (sure)</div>
+    <p class="prose">Odds below 1× mean the version's top choice is wrong, a <b>flip</b>. Q6_K's odds at 813 are 0.167 ÷ 0.833 = 0.2×. Ranking all 1,000 positions by BF16's odds gives each digit a <b>percentile</b>. Position 813 is the least certain digit of the 4B's π, while a typical digit sits at about 10,000×.</p>
+
+    <h3>5. From probabilities to noise</h3>
+    <p class="prose"><b>Noise</b> compares a compressed version's whole prediction with the reference's at the same position, every candidate included. It is the KL divergence: for every token, the reference's probability times the log of how much more likely the reference found it.</p>
+    <div class="calc">noise = Σ over tokens  p<sub>BF16</sub> × ln( p<sub>BF16</sub> ÷ p<sub>version</sub> )<br><br>Q6_K at 813:  0.525 × ln(0.525 ÷ 0.167) + 0.474 × ln(0.474 ÷ 0.833) = 0.60 − 0.27 ≈ 0.34</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Noise at</th><th class="r">position 123</th><th class="r">position 326</th><th class="r">position 813</th><th class="r">average over all 1,000</th></tr></thead>
+        <tbody>
+          <tr><td>Q6_K</td><td class="r">0.0001</td><td class="r">0.015</td><td class="r">0.34</td><td class="r">0.0011</td></tr>
+          <tr><td>Q4_K_M</td><td class="r">1.44</td><td class="r">0.18</td><td class="r">2.82</td><td class="r">0.039</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">Identical predictions give exactly 0, and the number grows as the two drift apart. Most positions add almost nothing. A few digits dominate the average. The figure called "noise on π" on the results page is this average. "Noise on random" is the same average over a string of 1,000 random digits, which no model can have memorized, so it shows damage to digit handling in general.</p>
+
+    <h3>6. Why a flip predicts where recitation stops</h3>
+    <p class="prose">Greedy decoding always writes the top choice. While a recitation is still correct, the text the model has seen so far is exactly the text teacher forcing fed in. So its next choice is exactly the top choice teacher forcing recorded at that position. The first flip under teacher forcing is therefore where greedy recitation of the same prompt stops. For Q6_K that's 813 in both measurements.</p>
+    <p class="prose">One caveat explains most of the spread between wordings: teacher forcing uses one prompt, and free recitation uses three. Q4_K_M's first flip is at 123, and two of its E1 wordings stop at exactly 123. The third, <code>Pi to 1000 decimal places:</code> with a line break before <code>3.</code>, differs by a single character, and that small change in context carries it past 123 to 459.</p>
+
+    <h3>7. The whole picture</h3>
+    <figure>
+      <div class="plate"><img src="figures/qwen3.5-4b_H2_margins.png" alt="How sure the 4B's BF16 is of each of the 1000 digits of π, and for each version the positions where its top choice is wrong."></div>
+      <figcaption><b>How to read it.</b> Top: BF16's odds at every one of the 1,000 positions, on a log scale. The deep dips are the near-ties, with 813 the deepest. Bottom: one row per version, least compressed at the top, with a dot at every flip. Q6_K's row has two dots, at 813 and 821. Lower rows add more, starting under the dips.</figcaption>
+    </figure>
+
+    <h3 id="the-tool">Inside the teacher-forcing tool</h3>
+    <p class="prose">Teacher forcing doesn't go through <code>llama-server</code>. It's a small command-line program, <code>tools/tf_dump.cpp</code> (about 200 lines of C++), that calls llama.cpp's C library directly. <code>tools/build.sh</code> compiles it against the same llama.cpp build the server uses, so both run identical arithmetic. A Python script drives it and boils its output down to one row per digit.</p>
+    <div class="flow" aria-label="Teacher-forcing pipeline">
+      <div class="node file"><b>pi.txt</b><span>the prompt and the 1,000 true digits, as plain text</span></div>
+      <div class="arrow">→</div>
+      <div class="node prog"><b>tf_dump</b><span>C++, llama.cpp C API: one pass, output at every token</span></div>
+      <div class="arrow">→</div>
+      <div class="node file"><b>pi.tokens.json<br>pi.logprobs.f32</b><span>the tokens, and every token's log-probability at every position (1 GB)</span></div>
+      <div class="arrow">→</div>
+      <div class="node prog"><b>run_tf.py</b><span>Python: pick the digit rows, compute odds and noise</span></div>
+      <div class="arrow">→</div>
+      <div class="node file"><b>pi.parquet</b><span>one row per digit, 1,000 rows, kept in the repo under <code>tf/</code></span></div>
+    </div>
+
+    <h3>The command</h3>
+    <pre class="prompt">tools/bin/tf_dump -m Qwen3.5-4B-Q6_K.gguf -f pi.txt -o tf_raw/Q6_K/pi</pre>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Argument</th><th>Default</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>-m</code></td><td>required</td><td>the GGUF model file</td></tr>
+          <tr><td><code>-f</code></td><td>required</td><td>the text to read, used byte for byte</td></tr>
+          <tr><td><code>-o</code></td><td>required</td><td>output prefix: the tool writes <code>&lt;prefix&gt;.tokens.json</code> and <code>&lt;prefix&gt;.logprobs.f32</code></td></tr>
+          <tr><td><code>-ngl</code></td><td>999</td><td>layers to put on the GPU (999 means all)</td></tr>
+          <tr><td><code>-b</code>, <code>-ub</code></td><td>2048, 512</td><td>batch and micro-batch size, the same as the server's</td></tr>
+          <tr><td><code>-no-mmap</code></td><td>off</td><td>read the model into memory instead of mapping the file, for models set to <code>mmap: false</code> in <code>config.yaml</code> because mapping them ran the machine out of memory</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">The text file for π is exactly <code>Pi to 1000 decimal places: 3.</code> followed by the 1,000 digits, with no line break. e, √2 and the random digits each get their own file and their own run.</p>
+
+    <h3>The llama.cpp calls, in order</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Call</th><th>Arguments that matter</th><th>What it does here</th></tr></thead>
+        <tbody>
+          <tr><td><code>llama_backend_init</code></td><td></td><td>starts the SYCL backend</td></tr>
+          <tr><td><code>llama_model_load_from_file</code></td><td><code>n_gpu_layers = 999</code></td><td>loads the GGUF with every layer on the graphics card</td></tr>
+          <tr><td><code>llama_model_get_vocab</code>, <code>llama_vocab_n_tokens</code></td><td></td><td>gets the vocabulary: 248,320 tokens for Qwen 3.5</td></tr>
+          <tr><td><code>llama_tokenize</code></td><td><code>add_special = true</code>, <code>parse_special = false</code></td><td>splits the text into tokens exactly as the server does for a raw <code>/completion</code> prompt. The π text becomes 1,013 tokens: 13 for the prompt, then one per digit</td></tr>
+          <tr><td><code>llama_init_from_model</code></td><td><code>n_ctx</code> = tokens + 16, flash attention off, 16-bit KV cache</td><td>creates a context with the same settings as the server</td></tr>
+          <tr><td><code>llama_batch_init</code></td><td><code>logits[j] = 1</code> for every token</td><td>builds the batch. <b>This is the key step.</b> Normal generation asks for output at the last token only, and here every token asks</td></tr>
+          <tr><td><code>llama_decode</code></td><td></td><td>runs the whole text through the model in one pass</td></tr>
+          <tr><td><code>llama_get_logits_ith(ctx, j)</code></td><td>j = every position</td><td>returns 248,320 raw scores (logits) for the token after position j</td></tr>
+          <tr><td>(own code)</td><td></td><td>turns each row of scores into log-probabilities (log-softmax, in double precision) and appends it to the output file</td></tr>
+          <tr><td><code>llama_token_to_piece</code></td><td></td><td>gets the text of each token for <code>tokens.json</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">The <code>logits</code> flag is what makes it teacher forcing. In normal writing, the model reads the prompt and only the last position's output matters, because that's where the next token is chosen. Here every position's output is kept, so a single pass gives the model's prediction after every prefix of the true text.</p>
+    <div class="ruler">
+      <div class="ruler-row">
+        <div class="ruler-label">normal generation: output requested at the last token only</div>
+        <div class="tokstrip"><span class="tk">Pi</span><span class="tk">␣to</span><span class="tk">␣</span><span class="tk">1</span><span class="tk">0</span><span class="tk">0</span><span class="tk">0</span><span class="tk">␣decimal</span><span class="tk">␣places</span><span class="tk">:</span><span class="tk">␣</span><span class="tk">3</span><span class="tk want">.</span></div>
+      </div>
+      <div class="ruler-row">
+        <div class="ruler-label">teacher forcing: output requested at every token</div>
+        <div class="tokstrip"><span class="tk want">Pi</span><span class="tk want">␣to</span><span class="tk want">␣</span><span class="tk want">1</span><span class="tk want">0</span><span class="tk want">0</span><span class="tk want">0</span><span class="tk want">␣decimal</span><span class="tk want">␣places</span><span class="tk want">:</span><span class="tk want">␣</span><span class="tk want">3</span><span class="tk want">.</span><span class="tk want">1</span><span class="tk want">4</span><span class="tk want">1</span><span class="tk want">5</span><span class="tk gap">…</span></div>
+      </div>
+    </div>
+
+    <h3>Output 1: tokens.json</h3>
+    <p class="prose">A small JSON file with the vocabulary size, the token ids and their text. This is the real start of the 4B's file for π (␣ marks a space):</p>
+    <pre class="prompt">{"n_vocab": 248320,
+ "tokens": [33617, 310, 220, 16, 15, 15, 15, 11778, 7247, 25, 220, 18, 13, 16, 19, …],
+ "pieces": ["Pi", " to", " ", "1", "0", "0", "0", " decimal", " places", ":", " ", "3", ".", "1", "4", …]}</pre>
+    <p class="prose">Each digit is its own token, which E0 checks for every file, and digit <i>d</i> is token id 15 + <i>d</i>. So "0" is 15 and "9" is 24.</p>
+
+    <h3>Output 2: logprobs.f32</h3>
+    <p class="prose">A raw block of 32-bit floats with no header, one row per token and one column per vocabulary entry: 1,013 × 248,320 values, 1,006,192,640 bytes. <b>Row <i>i</i> holds the log-probability of every possible next token after tokens 0…<i>i</i></b>, so it is the model's prediction for token <i>i</i>&nbsp;+&nbsp;1. Python opens it with <code>numpy.memmap</code> and reads only the rows it needs. Here are three rows and seven of the 248,320 columns, from the 4B's BF16:</p>
+    <div class="table-wrap">
+      <table class="tf matrix">
+        <thead><tr><th>row · after the text…</th><th>15 "0"</th><th>16 "1"</th><th>19 "4"</th><th>22 "7"</th><th>24 "9"</th><th>198 line break</th><th>220 space</th><th class="dots">…</th></tr></thead>
+        <tbody>
+          <tr><th>12 · …places: 3.</th><td>−6.18<span class="p">0.002</span></td><td class="hit">−0.04<span class="p">0.959</span></td><td>−7.28<span class="p">0.0007</span></td><td>−8.18<span class="p">0.0003</span></td><td>−8.13<span class="p">0.0003</span></td><td>−5.03<span class="p">0.007</span></td><td>−3.99<span class="p">0.019</span></td><td class="dots">…</td></tr>
+          <tr><th>13 · …3.1</th><td>−8.12<span class="p">0.0003</span></td><td>−8.02<span class="p">0.0003</span></td><td class="hit">−0.01<span class="p">0.994</span></td><td>−9.38<span class="p">0.0001</span></td><td>−9.14<span class="p">0.0001</span></td><td>−8.23<span class="p">0.0003</span></td><td>−6.44<span class="p">0.002</span></td><td class="dots">…</td></tr>
+          <tr><th>825 · …59455346</th><td>−14.09<span class="p">0.000001</span></td><td>−7.66<span class="p">0.0005</span></td><td>−13.31<span class="p">0.000002</span></td><td>−0.75<span class="p">0.474</span></td><td class="hit">−0.64<span class="p">0.525</span></td><td>−18.34<span class="p">0.00000001</span></td><td>−18.49<span class="p">0.00000001</span></td><td class="dots">…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">Each cell holds the stored log-probability, with the probability (e raised to it) underneath. The highlighted cell is the true next token. Row 12 is the first digit after "3.", where BF16 already gives a space or a line break a few percent. Row 825 is digit position 813, the near-tie from earlier: 0.525 for the true 9 against 0.474 for 7. Each row adds up to exactly 1 over all 248,320 columns.</p>
+
+    <h3>From the raw file to one row per digit</h3>
+    <ol class="steps">
+      <li><span><b>Find each digit's token.</b> <code>run_tf.py</code> walks the <code>pieces</code> list, adding up their lengths, to find the token that starts exactly at each digit of the text. For π, digit position <i>k</i> is token 13&nbsp;+&nbsp;<i>k</i>, and its prediction is in row 12&nbsp;+&nbsp;<i>k</i>.</span></li>
+      <li><span><b>Read that row and compute.</b> The probability and rank of the true digit, the best other token, the odds (true digit against the best other), and the version's top choice.</span></li>
+      <li><span><b>Compare with the reference.</b> The reference's raw file is kept on disk. The script checks that both files hold the same tokens, then computes the noise (KL divergence) over all 248,320 columns of the same row, and whether the two top choices agree.</span></li>
+      <li><span><b>Save and delete.</b> The 1,000 rows go to <code>tf/&lt;model&gt;/&lt;version&gt;/pi.parquet</code>, and the 1 GB raw file is deleted, unless it belongs to the reference.</span></li>
+    </ol>
+    <p class="prose">These are three real rows from the 4B's Q6_K file for π, around the flip at 813:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th class="r">pos</th><th class="r">digit</th><th class="r">logprob</th><th class="r">rank</th><th class="r">margin</th><th class="r">top1_token</th><th class="r">kl_vs_ref</th><th class="r">top1_matches_ref</th></tr></thead>
+        <tbody>
+          <tr><td class="r">812</td><td class="r">6</td><td class="r">−0.0002</td><td class="r">0</td><td class="r">8.64</td><td class="r">21 ("6")</td><td class="r">0.000005</td><td class="r">yes</td></tr>
+          <tr><td class="r">813</td><td class="r">9</td><td class="r">−1.79</td><td class="r">1</td><td class="r">−1.61</td><td class="r">22 ("7")</td><td class="r">0.336</td><td class="r">no</td></tr>
+          <tr><td class="r">814</td><td class="r">0</td><td class="r">−0.012</td><td class="r">0</td><td class="r">4.43</td><td class="r">15 ("0")</td><td class="r">0.005</td><td class="r">yes</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <dl class="guide">
+      <dt>logprob</dt><dd>log-probability of the true digit. e<sup>−1.79</sup> = 0.167, Q6_K's 16.7% at 813.</dd>
+      <dt>rank</dt><dd>how many tokens scored higher than the true digit. 0 means it was the top choice, so any rank above 0 is a flip.</dd>
+      <dt>margin</dt><dd>log-probability of the true digit minus that of the best other token. The odds on the results pages are e<sup>margin</sup>: e<sup>8.64</sup> ≈ 5,600× at 812, and e<sup>−1.61</sup> = 0.2× at 813.</dd>
+      <dt>top1_token</dt><dd>the token id the version would write, 22 being "7".</dd>
+      <dt>kl_vs_ref</dt><dd>the noise at this position, summed over the whole vocabulary.</dd>
+      <dt>top1_matches_ref</dt><dd>whether the version's top choice is the reference's.</dd>
+    </dl>
+    <p class="prose">Every figure about certainty and noise on the results page is built from these files. The analysis reads them with <code>pyarrow</code>, and the files for every version of all three models are in the repository.</p>
+
+    <h3>Why not the server's API?</h3>
+    <p class="prose"><code>llama-server</code> can return probabilities through <code>n_probs</code>, but only the top few candidates, and only for tokens it generates itself. Teacher forcing needs the full distribution at every position of text it is <i>given</i>, and the noise calculation needs all 248,320 probabilities, not the top 10. llama.cpp's own <code>llama-perplexity</code> tool can measure KL divergence too, but it reports averages over chunks of text, with nothing tied to individual digits.</p>
+    <p class="prose">The two paths do agree. In the sampling follow-up, the server's probabilities for the prompt tokens matched <code>tf_dump</code>'s exactly. The only differences were on tokens the server generated itself, one at a time, which shifts near-tie probabilities by 2–3%.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Sampling</div>
+    <h2>The same records forecast sampled answers</h2>
+    <p class="prose">Chat apps don't use greedy decoding. They sample, picking each token at random in proportion to its probability after some trimming. Teacher forcing already holds every probability, so the chance that a sampler picks the true digit can be worked out at each position, and multiplying those chances along π forecasts how far a sampled recitation gets. Against 64 real sampled runs per version, the forecast held to within a few percent for most versions. The results are in <a href="./#follow-up-2">follow-up 2 on the results page</a>.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Method notes</div>
+    <h2>Problems found along the way</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Problem</th><th>What was done</th></tr></thead>
+        <tbody>
+          <tr><td>E4 prompt read as "say this number"</td><td>Kept as recorded. E4b, with an explicit example, rerun on all 28 builds</td></tr>
+          <tr><td>E6 (recite π as words): even the 4B's BF16 counts "zero one two three…"</td><td>Reported as something the 4B can't do. The 9B can't either, the 27B can</td></tr>
+          <tr><td>"e to 1000 decimal places: 2." answered with 1,200 zeros at BF16</td><td>Real model behaviour. Results reported per constant, π carries H1</td></tr>
+          <tr><td>The server cached prompts in host memory</td><td>Turned off and the whole study rerun</td></tr>
+          <tr><td>Peak graphics memory caught ~750 MiB spikes while a model loads</td><td>Graphics memory is reported as the typical value during the tests</td></tr>
+          <tr><td>The 27B, mapped into memory, ran the 30 GB machine out of memory</td><td>The 27B loads without mapping. Results are the same</td></tr>
+          <tr><td>Probabilities while writing token by token differ slightly from the single teacher-forced pass</td><td>Measured and reported. It matters only at near-ties, and only for the sampling forecast</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <p>Source, data and full method: <a href="https://github.com/engineeringthefutureai/bits-of-pi">github.com/engineeringthefutureai/bits-of-pi</a> · <a href="https://github.com/engineeringthefutureai/bits-of-pi/blob/main/PLAN.md">PLAN.md</a></p>
+    <p>Code under the MIT License.</p>
+  </footer>
+</main>
+</body>
+</html>

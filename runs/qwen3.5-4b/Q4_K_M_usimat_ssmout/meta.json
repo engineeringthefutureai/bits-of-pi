@@ -1,0 +1,18 @@
+{
+ "model": "qwen3.5-4b",
+ "variant": "Q4_K_M_usimat_ssmout",
+ "group": "recipe",
+ "source": "quantize",
+ "file_size": 2740262080,
+ "n_params": 4205751296,
+ "bpw": 5.212,
+ "sha256": "66594b41b4c5dd64a386cfe6c240ab134ea3993f74e915c93c10fc85dad1623f",
+ "llama_cpp_commit": "bed0a856606ee4a24a164066f73d2379447033f5",
+ "backend": "sycl",
+ "quant_type": "Q4_K_M",
+ "imatrix": "unsloth",
+ "imatrix_sha256": "63718abd33c6ddcbb67f9089fb8bbaf0bc9996be4e23bba14ce17dcee76924d2",
+ "tensor_types": [
+  "ssm_out=q5_k"
+ ]
+}

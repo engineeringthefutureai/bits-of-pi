@@ -4,6 +4,19 @@
 
 **Results: [bits-of-pi.engineeringthefuture.ai](https://bits-of-pi.engineeringthefuture.ai/)**
 
+## About this project
+
+I made this to learn what quantization does to a model. Claude Code, Anthropic's coding agent,
+ran the research and summarized it for me. It wrote the code, ran every experiment, and wrote the
+reports and the site. I picked the questions, read the results and asked for changes where the
+write-up claimed more than the data showed.
+
+Some will call it AI slop, and it probably is. For me it is a learning opportunity. Every number
+comes from a real run, and the scripts and scored data are all here, so anything can be checked or
+run again. Read the conclusions as notes from someone learning, not as peer-reviewed research.
+
+## What it measures
+
 How does weight quantization damage exact, low-margin token decisions? This repo measures it
 with digit sequences on Qwen 3.5/3.8 GGUF models (28 variants of the 4B, 19 of the 9B, 17 of the 27B), from BF16 down to
 ~2 bits per weight, run through llama.cpp.
@@ -17,7 +30,9 @@ Three abilities are tested separately:
 A teacher-forced pass measures per-position logit margins and KL divergence from BF16, to
 explain *where* recall breaks, not just *when*.
 
-The full test plan, metrics, comparison method and hypotheses are in **[PLAN.md](PLAN.md)**.
+The full test plan, metrics, comparison method and hypotheses are in **[PLAN.md](PLAN.md)**. New to
+quantization? **[QUANTIZATION_GUIDE.md](QUANTIZATION_GUIDE.md)** explains how every model file was
+made, what an imatrix is, and why one can be borrowed from another publisher.
 
 ## Layout
 
@@ -31,8 +46,10 @@ runs/<model>/<variant>/              per-variant summaries: file, bench, resourc
 tf/<model>/<variant>/<text>.parquet   E2 per-digit-position records
 scores/              scored rows and headline tables
 figures/             one figure per hypothesis, plus H5_model_size.png across models
-docs/                GitHub Pages site (index.html + copies of its figures)
-scripts/             make_inputs, pipeline, run_gen, run_tf, e0, score, analyze
+docs/                GitHub Pages site: index.html (results), method.html (how the experiments
+                     work), guide.html (generated from QUANTIZATION_GUIDE.md), style.css, figures
+scripts/             make_inputs, pipeline, run_gen, run_tf, e0, score, analyze, sampling,
+                     arch_figure (the layer diagram)
 tools/tf_dump.cpp    teacher-forced logit dump, linked to the pinned llama.cpp build
 tests/               unit tests for extraction and alignment
 ```
@@ -53,6 +70,7 @@ tools/build.sh                         # builds tools/bin/tf_dump against the pi
 .venv/bin/python scripts/pipeline.py --model qwen3.5-4b       # download/quantize -> run -> delete
 .venv/bin/python scripts/score.py --model qwen3.5-4b
 .venv/bin/python scripts/analyze.py --model qwen3.5-4b
+.venv/bin/python scripts/sampling.py --model qwen3.5-4b     # follow-up: sampled recitations of π
 .venv/bin/python scripts/build_site.py                 # refresh docs/figures for the site
 ```
 
@@ -72,7 +90,8 @@ run a second pipeline on the other device and port with a disjoint `--variants` 
 
 Phase 1 (Qwen 3.5 4B): **[REPORT.md](REPORT.md)**. Phase 2 (Qwen 3.5 9B, and the 4B/9B
 comparison): **[REPORT_9B.md](REPORT_9B.md)**. Phase 3 (Qwen 3.8 27B, and the three-size
-comparison): **[REPORT_27B.md](REPORT_27B.md)**.
+comparison): **[REPORT_27B.md](REPORT_27B.md)**. Follow-ups (whether a quick noise test predicts recall, sampling against a forecast from
+per-digit certainty, and unsloth's recipe taken apart): **[REPORT_FOLLOWUP.md](REPORT_FOLLOWUP.md)**.
 
 ## License
 
