@@ -17,6 +17,7 @@ import re
 import shutil
 import struct
 import sys
+import zlib
 
 from common import FIGURES, ROOT, SCORES, TF, load_config, read_jsonl
 
@@ -352,13 +353,12 @@ def seo(page, files):
              '<script type="application/ld+json">\n'
              + structured_data(page.name, title, description, author, files) + "\n</script>\n<!-- /seo -->\n")
     text = text.replace("</head>", block + "</head>", 1)
-    icon_tags = "\n".join(l for l in (
-        '<link rel="icon" type="image/svg+xml" sizes="any" href="/favicon.svg">' if (DOCS / "favicon.svg").exists() else "",
-        '<link rel="icon" href="/favicon.ico" sizes="48x48">' if (DOCS / "favicon.ico").exists() else "",
-        '<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">' if (DOCS / "apple-touch-icon.png").exists() else "",
-    ) if l)
-    if icon_tags:
-        text = re.sub(r'(<link rel="(?:icon|apple-touch-icon)"[^>]*>\n?)+', icon_tags + "\n", text, count=1)
+    icon_tags = (
+        '<link rel="icon" type="image/svg+xml" sizes="any" href="/favicon.svg">\n'
+        '<link rel="icon" href="/favicon.ico" sizes="48x48">\n'
+        '<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">'
+    )
+    text = re.sub(r'(<link rel="(?:icon|apple-touch-icon)"[^>]*>\n?)+', icon_tags + "\n", text, count=1)
     if page.name in OG_DESCRIPTIONS:
         text = re.sub(r'<meta property="og:description" content="[^"]*">',
                       f'<meta property="og:description" content="{OG_DESCRIPTIONS[page.name]}">', text, count=1)
@@ -382,45 +382,137 @@ def not_found():
     (DOCS / "404.html").write_text(page)
 
 
+def _cubic_bezier(p0, p1, p2, p3, steps=24):
+    pts = []
+    for i in range(1, steps + 1):
+        t = i / steps
+        mt = 1.0 - t
+        x = mt**3 * p0[0] + 3 * mt**2 * t * p1[0] + 3 * mt * t**2 * p2[0] + t**3 * p3[0]
+        y = mt**3 * p0[1] + 3 * mt**2 * t * p1[1] + 3 * mt * t**2 * p2[1] + t**3 * p3[1]
+        pts.append((x, y))
+    return pts
+
+
+def _pi_polygon():
+    """Closed polygon approximation of the Georgia π glyph in 64x64 viewBox coordinates."""
+    poly = [(47.62, 23.09), (47.62, 26.86), (41.36, 26.86)]
+    poly += _cubic_bezier((41.36, 26.86), (41.22, 28.60), (41.05, 31.15), (40.85, 34.50))
+    poly += _cubic_bezier((40.85, 34.50), (40.65, 37.84), (40.55, 39.89), (40.55, 40.66))
+    poly += _cubic_bezier((40.55, 40.66), (40.55, 41.80), (40.82, 42.59), (41.35, 43.02))
+    poly += _cubic_bezier((41.35, 43.02), (41.87, 43.46), (42.50, 43.67), (43.24, 43.67))
+    poly += _cubic_bezier((43.24, 43.67), (44.03, 43.67), (44.71, 43.46), (45.28, 43.05))
+    poly += _cubic_bezier((45.28, 43.05), (45.85, 42.63), (46.50, 41.94), (47.25, 40.96))
+    poly.append((48.10, 41.80))
+    poly += _cubic_bezier((48.10, 41.80), (47.22, 43.39), (46.18, 44.61), (44.99, 45.46))
+    poly += _cubic_bezier((44.99, 45.46), (43.80, 46.31), (42.36, 46.73), (40.68, 46.73))
+    poly += _cubic_bezier((40.68, 46.73), (38.92, 46.73), (37.65, 46.23), (36.88, 45.23))
+    poly += _cubic_bezier((36.88, 45.23), (36.11, 44.23), (35.72, 42.63), (35.72, 40.42))
+    poly += _cubic_bezier((35.72, 40.42), (35.72, 39.46), (35.85, 37.39), (36.11, 34.21))
+    poly += _cubic_bezier((36.11, 34.21), (36.37, 31.02), (36.57, 28.57), (36.71, 26.86))
+    poly.append((28.88, 26.86))
+    poly += _cubic_bezier((28.88, 26.86), (28.54, 33.43), (28.11, 38.29), (27.58, 41.45))
+    poly += _cubic_bezier((27.58, 41.45), (27.05, 44.60), (26.07, 46.36), (24.64, 46.73))
+    poly += _cubic_bezier((24.64, 46.73), (23.76, 46.73), (23.09, 46.46), (22.63, 45.92))
+    poly += _cubic_bezier((22.63, 45.92), (22.17, 45.38), (21.94, 44.68), (21.94, 43.81))
+    poly += _cubic_bezier((21.94, 43.81), (21.94, 43.17), (22.12, 42.54), (22.48, 41.93))
+    poly += _cubic_bezier((22.48, 41.93), (22.84, 41.31), (23.38, 40.42), (24.10, 39.25))
+    poly += _cubic_bezier((24.10, 39.25), (24.83, 38.08), (25.38, 36.56), (25.75, 34.70))
+    poly += _cubic_bezier((25.75, 34.70), (26.12, 32.83), (26.42, 30.22), (26.64, 26.86))
+    poly.append((24.50, 26.86))
+    poly += _cubic_bezier((24.50, 26.86), (23.22, 26.86), (22.21, 27.14), (21.46, 27.70))
+    poly += _cubic_bezier((21.46, 27.70), (20.71, 28.26), (19.95, 29.18), (19.18, 30.46))
+    poly.append((18.18, 29.96))
+    poly += _cubic_bezier((18.18, 29.96), (19.04, 27.80), (20.11, 26.16), (21.39, 25.04))
+    poly += _cubic_bezier((21.39, 25.04), (22.67, 23.92), (24.44, 23.09), (26.70, 23.09))
+    return poly
+
+
+def _point_in_poly(x, y, poly):
+    inside = False
+    n = len(poly)
+    x0, y0 = poly[-1]
+    for i in range(n):
+        x1, y1 = poly[i]
+        if (y1 > y) != (y0 > y) and x < (x0 - x1) * (y - y1) / (y0 - y1) + x1:
+            inside = not inside
+        x0, y0 = x1, y1
+    return inside
+
+
+def _in_rounded_rect(x, y, size=64.0, r=12.0):
+    if x < 0 or x >= size or y < 0 or y >= size:
+        return False
+    cx = r if x < r else (size - r if x > size - r else x)
+    cy = r if y < r else (size - r if y > size - r else y)
+    return (x - cx) ** 2 + (y - cy) ** 2 <= r * r
+
+
+def _render_icon_png(size, poly):
+    """Render the 64x64 rounded-square π icon at `size`x`size` RGBA PNG with 4x4 supersampling."""
+    bg_r, bg_g, bg_b = 0x2A, 0x78, 0xD6
+    scale = 64.0 / size
+    grid = (0.125, 0.375, 0.625, 0.875)
+    raw = bytearray()
+    for py in range(size):
+        raw.append(0)  # PNG filter type 0 (None)
+        for px in range(size):
+            bg_hits = 0
+            fg_hits = 0
+            for sy in grid:
+                vy = (py + sy) * scale
+                for sx in grid:
+                    vx = (px + sx) * scale
+                    if _in_rounded_rect(vx, vy):
+                        bg_hits += 1
+                        if _point_in_poly(vx, vy, poly):
+                            fg_hits += 1
+            if bg_hits == 0:
+                raw.extend((0, 0, 0, 0))
+            else:
+                alpha = round(bg_hits * 255 / 16)
+                t = fg_hits / bg_hits
+                r = round(bg_r * (1.0 - t) + 255 * t)
+                g = round(bg_g * (1.0 - t) + 255 * t)
+                b = round(bg_b * (1.0 - t) + 255 * t)
+                raw.extend((r, g, b, alpha))
+
+    def chunk(tag, data):
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+
+    ihdr = struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)
+    idat = zlib.compress(bytes(raw), 9)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", idat) + chunk(b"IEND", b"")
+
+
 def favicons():
     """Write favicon.svg, favicon.ico (48x48) and apple-touch-icon.png (180x180) in docs/ for search engines."""
+    pi_path = (
+        "M47.62 23.09V26.86H41.36C41.22 28.60 41.05 31.15 40.85 34.50"
+        "C40.65 37.84 40.55 39.89 40.55 40.66C40.55 41.80 40.82 42.59 41.35 43.02"
+        "C41.87 43.46 42.50 43.67 43.24 43.67C44.03 43.67 44.71 43.46 45.28 43.05"
+        "C45.85 42.63 46.50 41.94 47.25 40.96L48.10 41.80C47.22 43.39 46.18 44.61 44.99 45.46"
+        "C43.80 46.31 42.36 46.73 40.68 46.73C38.92 46.73 37.65 46.23 36.88 45.23"
+        "C36.11 44.23 35.72 42.63 35.72 40.42C35.72 39.46 35.85 37.39 36.11 34.21"
+        "C36.37 31.02 36.57 28.57 36.71 26.86H28.88C28.54 33.43 28.11 38.29 27.58 41.45"
+        "C27.05 44.60 26.07 46.36 24.64 46.73C23.76 46.73 23.09 46.46 22.63 45.92"
+        "C22.17 45.38 21.94 44.68 21.94 43.81C21.94 43.17 22.12 42.54 22.48 41.93"
+        "C22.84 41.31 23.38 40.42 24.10 39.25C24.83 38.08 25.38 36.56 25.75 34.70"
+        "C26.12 32.83 26.42 30.22 26.64 26.86H24.50C23.22 26.86 22.21 27.14 21.46 27.70"
+        "C20.71 28.26 19.95 29.18 19.18 30.46L18.18 29.96C19.04 27.80 20.11 26.16 21.39 25.04"
+        "C22.67 23.92 24.44 23.09 26.70 23.09H47.62Z"
+    )
     (DOCS / "favicon.svg").write_text(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">\n'
         '  <rect width="64" height="64" rx="12" fill="#2a78d6"/>\n'
-        '  <text x="32" y="46" font-family="Georgia,serif" font-size="44" text-anchor="middle" fill="white">π</text>\n'
+        f'  <path fill="#ffffff" d="{pi_path}"/>\n'
         "</svg>\n"
     )
-    try:
-        import io
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        from matplotlib.patches import FancyBboxPatch
-
-        for name, size in (("favicon.ico", 48), ("apple-touch-icon.png", 180)):
-            fig = plt.figure(figsize=(1, 1), dpi=size)
-            fig.patch.set_alpha(0.0)
-            ax = fig.add_axes([0, 0, 1, 1])
-            ax.set_xlim(0, 64)
-            ax.set_ylim(0, 64)
-            ax.axis("off")
-            ax.add_patch(FancyBboxPatch((0, 0), 64, 64, boxstyle="round,pad=0,rounding_size=12",
-                                        fc="#2a78d6", ec="none"))
-            ax.text(32, 30, "π", fontsize=44 * 72 / 64, color="white", ha="center", va="center",
-                    fontfamily="serif")
-            buf = io.BytesIO()
-            fig.savefig(buf, format="png", dpi=size, transparent=True)
-            plt.close(fig)
-            png_bytes = buf.getvalue()
-            if name.endswith(".ico"):
-                # ICO header (6 bytes) + 1 ICONDIRENTRY (16 bytes) + PNG payload
-                header = struct.pack("<HHH", 0, 1, 1)
-                entry = struct.pack("<BBBBHHII", size, size, 0, 0, 1, 32, len(png_bytes), 22)
-                (DOCS / name).write_bytes(header + entry + png_bytes)
-            else:
-                (DOCS / name).write_bytes(png_bytes)
-    except ImportError:
-        pass
+    poly = _pi_polygon()
+    png48 = _render_icon_png(48, poly)
+    ico_header = struct.pack("<HHH", 0, 1, 1)
+    ico_entry = struct.pack("<BBBBHHII", 48, 48, 0, 0, 1, 32, len(png48), 22)
+    (DOCS / "favicon.ico").write_bytes(ico_header + ico_entry + png48)
+    (DOCS / "apple-touch-icon.png").write_bytes(_render_icon_png(180, poly))
 
 
 def crawler_files():
@@ -475,9 +567,15 @@ questions and reviewed the results. The conclusions are notes, not peer-reviewed
 
 def main():
     favicons()
-    build_guide()
-    not_found()
     files = export_data()
+    data_files = [p.name for p in (DOCS / "downloads").iterdir()]
+    for page in sorted(DOCS.glob("*.html")):
+        if page.name not in ("404.html", "guide.html"):
+            set_topbar(page)
+            seo(page, data_files)
+    build_guide()
+    seo(DOCS / "guide.html", data_files)
+    not_found()
     pages = sorted(DOCS.glob("*.html"))
     wanted = sorted({f for p in pages for f in re.findall(r'src="figures/([^"]+)"', p.read_text())})
     missing = [f for f in wanted if not (FIGURES / f).exists()]
@@ -488,12 +586,6 @@ def main():
     out.mkdir(parents=True)
     for f in wanted:
         shutil.copy2(FIGURES / f, out / f)
-    data_files = [p.name for p in (DOCS / "downloads").iterdir()]
-    for page in sorted(DOCS.glob("*.html")):
-        if page.name not in ("404.html", "guide.html"):
-            set_topbar(page)
-        if page.name != "404.html":
-            seo(page, data_files)
     crawler_files()
     (DOCS / ".nojekyll").touch()
     print(f"docs/: guide.html generated, {len(pages)} pages, {len(wanted)} figures copied, "
