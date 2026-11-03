@@ -8,9 +8,6 @@ import subprocess
 import time
 from pathlib import Path
 
-import requests
-import yaml
-
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 INPUTS = ROOT / "inputs"
@@ -24,6 +21,7 @@ GEN_EXPS = ["E1", "E3", "E4", "E4b", "E5", "E6"]
 
 
 def load_config():
+    import yaml
     with open(ROOT / "config.yaml") as f:
         return yaml.safe_load(f)
 
@@ -119,6 +117,7 @@ class Server:
         self.stop()
 
     def start(self, timeout=600):
+        import requests
         log = open(self.log_path, "a") if self.log_path else subprocess.DEVNULL
         self.proc = subprocess.Popen(self.cmd, env=self.env, stdout=log, stderr=subprocess.STDOUT)
         t0 = time.time()
@@ -144,6 +143,7 @@ class Server:
         self.proc = None
 
     def completion(self, prompt, n_predict):
+        import requests
         body = {"prompt": prompt, "n_predict": n_predict, **self.cfg["request"]}
         r = requests.post(self.url + "/completion", json=body, timeout=3600)
         r.raise_for_status()
@@ -154,6 +154,7 @@ class Server:
                       "timings": d.get("timings")}
 
     def chat(self, user_message, n_predict):
+        import requests
         body = {"messages": [{"role": "user", "content": user_message}], "max_tokens": n_predict,
                 "chat_template_kwargs": self.cfg["chat_template_kwargs"], **self.cfg["request"]}
         r = requests.post(self.url + "/v1/chat/completions", json=body, timeout=3600)

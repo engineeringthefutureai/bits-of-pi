@@ -18,8 +18,6 @@ import shutil
 import struct
 import sys
 
-import pyarrow.parquet as pq
-
 from common import FIGURES, ROOT, SCORES, TF, load_config, read_jsonl
 
 DOCS = ROOT / "docs"
@@ -244,6 +242,13 @@ def export_data():
     """docs/downloads/: the headline table of every model, every scored test answer and per-digit
     teacher forcing on π, as compact JSON for data.html, plus the headline CSVs for download.
     Model outputs are not included: they live only in the raw run logs, which are not published."""
+    try:
+        import pyarrow.parquet as pq
+    except ImportError:
+        out = DOCS / "downloads"
+        if out.exists() and any(out.iterdir()):
+            return sorted(f.name for f in out.iterdir())
+        raise
     out = DOCS / "downloads"
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True)
@@ -302,7 +307,7 @@ def page_url(name):
 
 def structured_data(name, title, description, author, files):
     """schema.org JSON-LD: the site, plus an article or, for the raw data page, a dataset."""
-    site = {"@type": "WebSite", "@id": SITE + "#site", "name": NAME, "url": SITE}
+    site = {"@type": "WebSite", "@id": SITE + "#site", "name": NAME, "alternateName": "Bits of Pi", "url": SITE}
     person = {"@type": "Person", "name": author, "url": GITHUB}
     common = {"name": title, "description": description, "url": page_url(name), "inLanguage": "en",
               "author": person, "isPartOf": {"@id": SITE + "#site"}, "keywords": ", ".join(KEYWORDS)}
@@ -330,15 +335,30 @@ def seo(page, files):
     description = html.unescape(re.search(r'<meta name="description" content="([^"]*)">', text)[1])
     author = re.search(r'<meta name="author" content="([^"]*)">', text)[1]
     w, h = png_size(DOCS / SHARE_IMAGE)
+    img_alt = ("Qwen Digit Recall: digits of π recited correctly against bits per weight for Qwen 3.5 4B, "
+               "Qwen 3.5 9B and Qwen 3.8 27B. All three lose digits at Q4_K_M, about 5 bits.")
+    og_desc = OG_DESCRIPTIONS.get(page.name, description)
     block = (f'<!-- seo -->\n<link rel="canonical" href="{page_url(page.name)}">\n'
              f'<meta property="og:site_name" content="{NAME}">\n'
+             '<meta property="og:locale" content="en_US">\n'
              f'<meta property="og:image:width" content="{w}">\n<meta property="og:image:height" content="{h}">\n'
-             '<meta property="og:image:alt" content="Qwen Digit Recall: digits of π recited correctly against bits '
-             'per weight for Qwen 3.5 4B, Qwen 3.5 9B and Qwen 3.8 27B. All three lose digits at Q4_K_M, about 5 bits.">\n'
+             f'<meta property="og:image:alt" content="{img_alt}">\n'
+             f'<meta name="twitter:title" content="{html.escape(title, quote=True)}">\n'
+             f'<meta name="twitter:description" content="{html.escape(og_desc, quote=True)}">\n'
+             f'<meta name="twitter:image" content="{SITE}{SHARE_IMAGE}">\n'
+             f'<meta name="twitter:image:alt" content="{img_alt}">\n'
+             '<meta name="theme-color" content="#2a78d6">\n'
              '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
              '<script type="application/ld+json">\n'
              + structured_data(page.name, title, description, author, files) + "\n</script>\n<!-- /seo -->\n")
     text = text.replace("</head>", block + "</head>", 1)
+    icon_tags = "\n".join(l for l in (
+        '<link rel="icon" type="image/svg+xml" sizes="any" href="/favicon.svg">' if (DOCS / "favicon.svg").exists() else "",
+        '<link rel="icon" href="/favicon.ico" sizes="48x48">' if (DOCS / "favicon.ico").exists() else "",
+        '<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">' if (DOCS / "apple-touch-icon.png").exists() else "",
+    ) if l)
+    if icon_tags:
+        text = re.sub(r'(<link rel="(?:icon|apple-touch-icon)"[^>]*>\n?)+', icon_tags + "\n", text, count=1)
     if page.name in OG_DESCRIPTIONS:
         text = re.sub(r'<meta property="og:description" content="[^"]*">',
                       f'<meta property="og:description" content="{OG_DESCRIPTIONS[page.name]}">', text, count=1)
@@ -360,6 +380,47 @@ def not_found():
              '    <p class="lede">There is nothing at this address. The results, the method, the guide to the model '
              'files and the raw data are linked above.</p>\n  </header>\n</main>\n</body>\n</html>\n')
     (DOCS / "404.html").write_text(page)
+
+
+def favicons():
+    """Write favicon.svg, favicon.ico (48x48) and apple-touch-icon.png (180x180) in docs/ for search engines."""
+    (DOCS / "favicon.svg").write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">\n'
+        '  <rect width="64" height="64" rx="12" fill="#2a78d6"/>\n'
+        '  <text x="32" y="46" font-family="Georgia,serif" font-size="44" text-anchor="middle" fill="white">π</text>\n'
+        "</svg>\n"
+    )
+    try:
+        import io
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from matplotlib.patches import FancyBboxPatch
+
+        for name, size in (("favicon.ico", 48), ("apple-touch-icon.png", 180)):
+            fig = plt.figure(figsize=(1, 1), dpi=size)
+            fig.patch.set_alpha(0.0)
+            ax = fig.add_axes([0, 0, 1, 1])
+            ax.set_xlim(0, 64)
+            ax.set_ylim(0, 64)
+            ax.axis("off")
+            ax.add_patch(FancyBboxPatch((0, 0), 64, 64, boxstyle="round,pad=0,rounding_size=12",
+                                        fc="#2a78d6", ec="none"))
+            ax.text(32, 30, "π", fontsize=44 * 72 / 64, color="white", ha="center", va="center",
+                    fontfamily="serif")
+            buf = io.BytesIO()
+            fig.savefig(buf, format="png", dpi=size, transparent=True)
+            plt.close(fig)
+            png_bytes = buf.getvalue()
+            if name.endswith(".ico"):
+                # ICO header (6 bytes) + 1 ICONDIRENTRY (16 bytes) + PNG payload
+                header = struct.pack("<HHH", 0, 1, 1)
+                entry = struct.pack("<BBBBHHII", size, size, 0, 0, 1, 32, len(png_bytes), 22)
+                (DOCS / name).write_bytes(header + entry + png_bytes)
+            else:
+                (DOCS / name).write_bytes(png_bytes)
+    except ImportError:
+        pass
 
 
 def crawler_files():
@@ -413,6 +474,7 @@ questions and reviewed the results. The conclusions are notes, not peer-reviewed
 
 
 def main():
+    favicons()
     build_guide()
     not_found()
     files = export_data()
